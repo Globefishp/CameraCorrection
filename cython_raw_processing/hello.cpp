@@ -3382,7 +3382,7 @@ static const char __pyx_k_itemsize_0_for_cython_array[] = "itemsize <= 0 for cyt
 static const char __pyx_k_unable_to_allocate_array_data[] = "unable to allocate array data.";
 static const char __pyx_k_build_raw_processing_hello_pyx[] = "build_raw_processing/hello.pyx";
 static const char __pyx_k_strided_and_direct_or_indirect[] = "<strided and direct or indirect>";
-static const char __pyx_k_j_aq_ZvQa_A_q_q_U_1_QfJas_Rq_Qe[] = "\200\001\340\004\026\220j\240\006\240a\240q\330\004\025\220Z\230v\240Q\240a\360\010\000\n\031\230\001\330\010\030\230\n\240&\250\001\250\021\330\010\013\210>\230\023\230A\340\014\021\220\021\340\014\027\220q\230\001\330\014\031\230\021\230%\230q\330\014\020\220\005\220U\230!\2301\330\020\035\230Q\230f\240J\250a\250s\260#\260R\260q\330\014\025\220Q\220e\230=\250\001\250\021\340\010\014\210A\210Q\340\004\013\2101";
+static const char __pyx_k_j_aq_ZvQa_A_1A_Qe1_E_aq_3c_1_AQ[] = "\200\001\340\004\026\220j\240\006\240a\240q\330\004\025\220Z\230v\240Q\240a\360\010\000\n\031\230\001\330\010\030\230\n\240&\250\001\250\021\330\010\013\210>\230\023\230A\340\014\021\220\021\330\010\t\330\020\033\2301\230A\330\020\035\230Q\230e\2401\330\020\024\220E\230\025\230a\230q\330\024!\240\021\240&\250\n\260!\2603\260c\270\022\2701\330\020\031\230\021\230%\230}\250A\250Q\340\014\020\220\001\220\021\340\004\013\2101";
 static const char __pyx_k_All_dimensions_preceding_dimensi[] = "All dimensions preceding dimension %d must be indexed and not sliced";
 static const char __pyx_k_Buffer_view_does_not_expose_stri[] = "Buffer view does not expose strides";
 static const char __pyx_k_Can_only_create_a_buffer_that_is[] = "Can only create a buffer that is contiguous in memory.";
@@ -19025,7 +19025,14 @@ static PyObject *__pyx_pf_5hello_process_data_numba(CYTHON_UNUSED PyObject *__py
   Py_ssize_t __pyx_t_9;
   Py_ssize_t __pyx_t_10;
   int __pyx_t_11;
-  PyObject *__pyx_t_12 = NULL;
+  char const *__pyx_t_12;
+  PyObject *__pyx_t_13 = NULL;
+  PyObject *__pyx_t_14 = NULL;
+  PyObject *__pyx_t_15 = NULL;
+  PyObject *__pyx_t_16 = NULL;
+  PyObject *__pyx_t_17 = NULL;
+  PyObject *__pyx_t_18 = NULL;
+  PyObject *__pyx_t_19 = NULL;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -19077,7 +19084,7 @@ static PyObject *__pyx_pf_5hello_process_data_numba(CYTHON_UNUSED PyObject *__py
                 #define unlikely(x) (x)
             #endif
             #ifdef _OPENMP
-            #pragma omp parallel private(__pyx_v_local_sum_ptr) private(__pyx_t_1, __pyx_t_10, __pyx_t_11, __pyx_t_2, __pyx_t_3, __pyx_t_4, __pyx_t_5, __pyx_t_6, __pyx_t_7, __pyx_t_8, __pyx_t_9) __Pyx_shared_in_cpython_freethreading(__pyx_parallel_freethreading_mutex) private(__pyx_filename, __pyx_lineno, __pyx_clineno) shared(__pyx_parallel_why, __pyx_parallel_exc_type, __pyx_parallel_exc_value, __pyx_parallel_exc_tb)
+            #pragma omp parallel private(__pyx_v_local_sum_ptr) private(__pyx_t_1, __pyx_t_10, __pyx_t_11, __pyx_t_12, __pyx_t_2, __pyx_t_3, __pyx_t_4, __pyx_t_5, __pyx_t_6, __pyx_t_7, __pyx_t_8, __pyx_t_9) firstprivate(__pyx_t_13, __pyx_t_14, __pyx_t_15, __pyx_t_16, __pyx_t_17, __pyx_t_18) __Pyx_shared_in_cpython_freethreading(__pyx_parallel_freethreading_mutex) private(__pyx_filename, __pyx_lineno, __pyx_clineno) shared(__pyx_parallel_why, __pyx_parallel_exc_type, __pyx_parallel_exc_value, __pyx_parallel_exc_tb)
             #endif /* _OPENMP */
             {
                 #ifdef _OPENMP
@@ -19110,8 +19117,8 @@ static PyObject *__pyx_pf_5hello_process_data_numba(CYTHON_UNUSED PyObject *__py
  *         if local_sum_ptr is NULL:
  *             #
  *             abort()             # <<<<<<<<<<<<<<
- * 
- *         for i in prange(height):
+ *         try:
+ *             for i in prange(height):
 */
                   abort();
 
@@ -19124,175 +19131,226 @@ static PyObject *__pyx_pf_5hello_process_data_numba(CYTHON_UNUSED PyObject *__py
 */
                 }
 
-                /* "hello.pyx":20
+                /* "hello.pyx":19
+ *             #
  *             abort()
- * 
- *         for i in prange(height):             # <<<<<<<<<<<<<<
- *             local_sum_ptr[0] = 0.0
- *             for j in range(width):
+ *         try:             # <<<<<<<<<<<<<<
+ *             for i in prange(height):
+ *                 local_sum_ptr[0] = 0.0
 */
-                __pyx_t_2 = __pyx_v_height;
-                {
-                    int __pyx_parallel_temp0 = ((int)0xbad0bad0);
-                    int __pyx_parallel_temp1 = ((int)0xbad0bad0);
-                    const char *__pyx_parallel_filename = NULL; int __pyx_parallel_lineno = 0, __pyx_parallel_clineno = 0;
-                    PyObject *__pyx_parallel_exc_type = NULL, *__pyx_parallel_exc_value = NULL, *__pyx_parallel_exc_tb = NULL;
-                    #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
-                    PyMutex __pyx_parallel_freethreading_mutex = {0};
-                    #endif
-                    int __pyx_parallel_why;
-                    __pyx_parallel_why = 0;
-                    __pyx_t_4 = (__pyx_t_2 - 0 + 1 - 1/abs(1)) / 1;
-                    if (__pyx_t_4 > 0)
-                    {
-                        #ifdef _OPENMP
-                        #pragma omp for firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) lastprivate(__pyx_v_j)
-                        #endif /* _OPENMP */
-                        for (__pyx_t_3 = 0; __pyx_t_3 < __pyx_t_4; __pyx_t_3++){
-                            if (__pyx_parallel_why < 2)
-                            {
-                                __pyx_v_i = (int)(0 + 1 * __pyx_t_3);
-                                /* Initialize private variables to invalid values */
-                                __pyx_v_j = ((int)0xbad0bad0);
+                /*try:*/ {
 
-                                /* "hello.pyx":21
- * 
- *         for i in prange(height):
- *             local_sum_ptr[0] = 0.0             # <<<<<<<<<<<<<<
- *             for j in range(width):
- *                 local_sum_ptr[0] += data_array[i, j] * j
+                  /* "hello.pyx":20
+ *             abort()
+ *         try:
+ *             for i in prange(height):             # <<<<<<<<<<<<<<
+ *                 local_sum_ptr[0] = 0.0
+ *                 for j in range(width):
 */
-                                (__pyx_v_local_sum_ptr[0]) = 0.0;
+                  __pyx_t_2 = __pyx_v_height;
+                  {
+                      int __pyx_parallel_temp0 = ((int)0xbad0bad0);
+                      int __pyx_parallel_temp1 = ((int)0xbad0bad0);
+                      const char *__pyx_parallel_filename = NULL; int __pyx_parallel_lineno = 0, __pyx_parallel_clineno = 0;
+                      PyObject *__pyx_parallel_exc_type = NULL, *__pyx_parallel_exc_value = NULL, *__pyx_parallel_exc_tb = NULL;
+                      #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+                      PyMutex __pyx_parallel_freethreading_mutex = {0};
+                      #endif
+                      int __pyx_parallel_why;
+                      __pyx_parallel_why = 0;
+                      __pyx_t_4 = (__pyx_t_2 - 0 + 1 - 1/abs(1)) / 1;
+                      if (__pyx_t_4 > 0)
+                      {
+                          #ifdef _OPENMP
+                          #pragma omp for firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) lastprivate(__pyx_v_j)
+                          #endif /* _OPENMP */
+                          for (__pyx_t_3 = 0; __pyx_t_3 < __pyx_t_4; __pyx_t_3++){
+                              if (__pyx_parallel_why < 2)
+                              {
+                                  __pyx_v_i = (int)(0 + 1 * __pyx_t_3);
+                                  /* Initialize private variables to invalid values */
+                                  __pyx_v_j = ((int)0xbad0bad0);
 
-                                /* "hello.pyx":22
- *         for i in prange(height):
- *             local_sum_ptr[0] = 0.0
- *             for j in range(width):             # <<<<<<<<<<<<<<
- *                 local_sum_ptr[0] += data_array[i, j] * j
- *             out_array[i] = local_sum_ptr[0]
+                                  /* "hello.pyx":21
+ *         try:
+ *             for i in prange(height):
+ *                 local_sum_ptr[0] = 0.0             # <<<<<<<<<<<<<<
+ *                 for j in range(width):
+ *                     local_sum_ptr[0] += data_array[i, j] * j
 */
-                                __pyx_t_5 = __pyx_v_width;
-                                __pyx_t_6 = __pyx_t_5;
-                                for (__pyx_t_7 = 0; __pyx_t_7 < __pyx_t_6; __pyx_t_7+=1) {
-                                  __pyx_v_j = __pyx_t_7;
+                                  (__pyx_v_local_sum_ptr[0]) = 0.0;
 
-                                  /* "hello.pyx":23
- *             local_sum_ptr[0] = 0.0
- *             for j in range(width):
- *                 local_sum_ptr[0] += data_array[i, j] * j             # <<<<<<<<<<<<<<
- *             out_array[i] = local_sum_ptr[0]
- * 
+                                  /* "hello.pyx":22
+ *             for i in prange(height):
+ *                 local_sum_ptr[0] = 0.0
+ *                 for j in range(width):             # <<<<<<<<<<<<<<
+ *                     local_sum_ptr[0] += data_array[i, j] * j
+ *                 out_array[i] = local_sum_ptr[0]
 */
-                                  __pyx_t_8 = 0;
-                                  __pyx_t_9 = __pyx_v_i;
-                                  __pyx_t_10 = __pyx_v_j;
-                                  __pyx_t_11 = -1;
-                                  if (__pyx_t_9 < 0) {
-                                    __pyx_t_9 += __pyx_v_data_array.shape[0];
-                                    if (unlikely(__pyx_t_9 < 0)) __pyx_t_11 = 0;
-                                  } else if (unlikely(__pyx_t_9 >= __pyx_v_data_array.shape[0])) __pyx_t_11 = 0;
-                                  if (__pyx_t_10 < 0) {
-                                    __pyx_t_10 += __pyx_v_data_array.shape[1];
-                                    if (unlikely(__pyx_t_10 < 0)) __pyx_t_11 = 1;
-                                  } else if (unlikely(__pyx_t_10 >= __pyx_v_data_array.shape[1])) __pyx_t_11 = 1;
-                                  if (unlikely(__pyx_t_11 != -1)) {
-                                    __Pyx_RaiseBufferIndexErrorNogil(__pyx_t_11);
-                                    __PYX_ERR(0, 23, __pyx_L13_error)
-                                  }
-                                  (__pyx_v_local_sum_ptr[__pyx_t_8]) = ((__pyx_v_local_sum_ptr[__pyx_t_8]) + ((*((double *) ( /* dim=1 */ ((char *) (((double *) ( /* dim=0 */ (__pyx_v_data_array.data + __pyx_t_9 * __pyx_v_data_array.strides[0]) )) + __pyx_t_10)) ))) * __pyx_v_j));
-                                }
+                                  __pyx_t_5 = __pyx_v_width;
+                                  __pyx_t_6 = __pyx_t_5;
+                                  for (__pyx_t_7 = 0; __pyx_t_7 < __pyx_t_6; __pyx_t_7+=1) {
+                                    __pyx_v_j = __pyx_t_7;
 
-                                /* "hello.pyx":24
- *             for j in range(width):
- *                 local_sum_ptr[0] += data_array[i, j] * j
- *             out_array[i] = local_sum_ptr[0]             # <<<<<<<<<<<<<<
- * 
- *         free(local_sum_ptr)
+                                    /* "hello.pyx":23
+ *                 local_sum_ptr[0] = 0.0
+ *                 for j in range(width):
+ *                     local_sum_ptr[0] += data_array[i, j] * j             # <<<<<<<<<<<<<<
+ *                 out_array[i] = local_sum_ptr[0]
+ *         finally:
 */
-                                __pyx_t_10 = __pyx_v_i;
-                                __pyx_t_5 = -1;
-                                if (__pyx_t_10 < 0) {
-                                  __pyx_t_10 += __pyx_v_out_array.shape[0];
-                                  if (unlikely(__pyx_t_10 < 0)) __pyx_t_5 = 0;
-                                } else if (unlikely(__pyx_t_10 >= __pyx_v_out_array.shape[0])) __pyx_t_5 = 0;
-                                if (unlikely(__pyx_t_5 != -1)) {
-                                  __Pyx_RaiseBufferIndexErrorNogil(__pyx_t_5);
-                                  __PYX_ERR(0, 24, __pyx_L13_error)
-                                }
-                                *((double *) ( /* dim=0 */ ((char *) (((double *) __pyx_v_out_array.data) + __pyx_t_10)) )) = (__pyx_v_local_sum_ptr[0]);
-                                goto __pyx_L18;
-                                __pyx_L13_error:;
-                                {
-                                    PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
-                                    #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
-                                    PyMutex_Lock(&__pyx_parallel_freethreading_mutex);
-                                    #endif
-                                    #ifdef _OPENMP
-                                    #pragma omp flush(__pyx_parallel_exc_type)
-                                    #endif /* _OPENMP */
-                                    if (!__pyx_parallel_exc_type) {
-                                      __Pyx_ErrFetchWithState(&__pyx_parallel_exc_type, &__pyx_parallel_exc_value, &__pyx_parallel_exc_tb);
-                                      __pyx_parallel_filename = __pyx_filename; __pyx_parallel_lineno = __pyx_lineno; __pyx_parallel_clineno = __pyx_clineno;
-                                      __Pyx_GOTREF(__pyx_parallel_exc_type);
+                                    __pyx_t_8 = 0;
+                                    __pyx_t_9 = __pyx_v_i;
+                                    __pyx_t_10 = __pyx_v_j;
+                                    __pyx_t_11 = -1;
+                                    if (__pyx_t_9 < 0) {
+                                      __pyx_t_9 += __pyx_v_data_array.shape[0];
+                                      if (unlikely(__pyx_t_9 < 0)) __pyx_t_11 = 0;
+                                    } else if (unlikely(__pyx_t_9 >= __pyx_v_data_array.shape[0])) __pyx_t_11 = 0;
+                                    if (__pyx_t_10 < 0) {
+                                      __pyx_t_10 += __pyx_v_data_array.shape[1];
+                                      if (unlikely(__pyx_t_10 < 0)) __pyx_t_11 = 1;
+                                    } else if (unlikely(__pyx_t_10 >= __pyx_v_data_array.shape[1])) __pyx_t_11 = 1;
+                                    if (unlikely(__pyx_t_11 != -1)) {
+                                      __Pyx_RaiseBufferIndexErrorNogil(__pyx_t_11);
+                                      __PYX_ERR(0, 23, __pyx_L18_error)
                                     }
-                                    #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
-                                    PyMutex_Unlock(&__pyx_parallel_freethreading_mutex);
-                                    #endif
-                                    __Pyx_PyGILState_Release(__pyx_gilstate_save);
-                                }
-                                __pyx_parallel_why = 4;
-                                goto __pyx_L17;
-                                __pyx_L17:;
-                                #ifdef _OPENMP
-                                #pragma omp critical(__pyx_parallel_lastprivates0)
-                                #endif /* _OPENMP */
-                                {
-                                    __pyx_parallel_temp0 = __pyx_v_i;
-                                    __pyx_parallel_temp1 = __pyx_v_j;
-                                }
-                                __pyx_L18:;
-                                #ifdef _OPENMP
-                                #pragma omp flush(__pyx_parallel_why)
-                                #endif /* _OPENMP */
-                            }
-                        }
-                    }
-                    if (__pyx_parallel_exc_type) {
-                      /* This may have been overridden by a continue, break or return in another thread. Prefer the error. */
-                      __pyx_parallel_why = 4;
-                    }
-                    if (__pyx_parallel_why) {
-                      __pyx_v_i = __pyx_parallel_temp0;
-                      __pyx_v_j = __pyx_parallel_temp1;
-                      switch (__pyx_parallel_why) {
-                            case 4:
-                        {
-                            PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
-                            #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
-                            PyMutex_Lock(&__pyx_parallel_freethreading_mutex);
-                            #endif
-                            __Pyx_GIVEREF(__pyx_parallel_exc_type);
-                            __Pyx_ErrRestoreWithState(__pyx_parallel_exc_type, __pyx_parallel_exc_value, __pyx_parallel_exc_tb);
-                            __pyx_filename = __pyx_parallel_filename; __pyx_lineno = __pyx_parallel_lineno; __pyx_clineno = __pyx_parallel_clineno;
-                            #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
-                            PyMutex_Unlock(&__pyx_parallel_freethreading_mutex);
-                            #endif
-                            __Pyx_PyGILState_Release(__pyx_gilstate_save);
-                        }
-                        goto __pyx_L8_error;
+                                    (__pyx_v_local_sum_ptr[__pyx_t_8]) = ((__pyx_v_local_sum_ptr[__pyx_t_8]) + ((*((double *) ( /* dim=1 */ ((char *) (((double *) ( /* dim=0 */ (__pyx_v_data_array.data + __pyx_t_9 * __pyx_v_data_array.strides[0]) )) + __pyx_t_10)) ))) * __pyx_v_j));
+                                  }
+
+                                  /* "hello.pyx":24
+ *                 for j in range(width):
+ *                     local_sum_ptr[0] += data_array[i, j] * j
+ *                 out_array[i] = local_sum_ptr[0]             # <<<<<<<<<<<<<<
+ *         finally:
+ *             free(local_sum_ptr)
+*/
+                                  __pyx_t_10 = __pyx_v_i;
+                                  __pyx_t_5 = -1;
+                                  if (__pyx_t_10 < 0) {
+                                    __pyx_t_10 += __pyx_v_out_array.shape[0];
+                                    if (unlikely(__pyx_t_10 < 0)) __pyx_t_5 = 0;
+                                  } else if (unlikely(__pyx_t_10 >= __pyx_v_out_array.shape[0])) __pyx_t_5 = 0;
+                                  if (unlikely(__pyx_t_5 != -1)) {
+                                    __Pyx_RaiseBufferIndexErrorNogil(__pyx_t_5);
+                                    __PYX_ERR(0, 24, __pyx_L18_error)
+                                  }
+                                  *((double *) ( /* dim=0 */ ((char *) (((double *) __pyx_v_out_array.data) + __pyx_t_10)) )) = (__pyx_v_local_sum_ptr[0]);
+                                  goto __pyx_L23;
+                                  __pyx_L18_error:;
+                                  {
+                                      PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
+                                      #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+                                      PyMutex_Lock(&__pyx_parallel_freethreading_mutex);
+                                      #endif
+                                      #ifdef _OPENMP
+                                      #pragma omp flush(__pyx_parallel_exc_type)
+                                      #endif /* _OPENMP */
+                                      if (!__pyx_parallel_exc_type) {
+                                        __Pyx_ErrFetchWithState(&__pyx_parallel_exc_type, &__pyx_parallel_exc_value, &__pyx_parallel_exc_tb);
+                                        __pyx_parallel_filename = __pyx_filename; __pyx_parallel_lineno = __pyx_lineno; __pyx_parallel_clineno = __pyx_clineno;
+                                        __Pyx_GOTREF(__pyx_parallel_exc_type);
+                                      }
+                                      #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+                                      PyMutex_Unlock(&__pyx_parallel_freethreading_mutex);
+                                      #endif
+                                      __Pyx_PyGILState_Release(__pyx_gilstate_save);
+                                  }
+                                  __pyx_parallel_why = 4;
+                                  goto __pyx_L22;
+                                  __pyx_L22:;
+                                  #ifdef _OPENMP
+                                  #pragma omp critical(__pyx_parallel_lastprivates0)
+                                  #endif /* _OPENMP */
+                                  {
+                                      __pyx_parallel_temp0 = __pyx_v_i;
+                                      __pyx_parallel_temp1 = __pyx_v_j;
+                                  }
+                                  __pyx_L23:;
+                                  #ifdef _OPENMP
+                                  #pragma omp flush(__pyx_parallel_why)
+                                  #endif /* _OPENMP */
+                              }
+                          }
                       }
-                    }
+                      if (__pyx_parallel_exc_type) {
+                        /* This may have been overridden by a continue, break or return in another thread. Prefer the error. */
+                        __pyx_parallel_why = 4;
+                      }
+                      if (__pyx_parallel_why) {
+                        __pyx_v_i = __pyx_parallel_temp0;
+                        __pyx_v_j = __pyx_parallel_temp1;
+                        switch (__pyx_parallel_why) {
+                              case 4:
+                          {
+                              PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
+                              #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+                              PyMutex_Lock(&__pyx_parallel_freethreading_mutex);
+                              #endif
+                              __Pyx_GIVEREF(__pyx_parallel_exc_type);
+                              __Pyx_ErrRestoreWithState(__pyx_parallel_exc_type, __pyx_parallel_exc_value, __pyx_parallel_exc_tb);
+                              __pyx_filename = __pyx_parallel_filename; __pyx_lineno = __pyx_parallel_lineno; __pyx_clineno = __pyx_parallel_clineno;
+                              #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+                              PyMutex_Unlock(&__pyx_parallel_freethreading_mutex);
+                              #endif
+                              __Pyx_PyGILState_Release(__pyx_gilstate_save);
+                          }
+                          goto __pyx_L14_error;
+                        }
+                      }
+                  }
                 }
 
                 /* "hello.pyx":26
- *             out_array[i] = local_sum_ptr[0]
- * 
- *         free(local_sum_ptr)             # <<<<<<<<<<<<<<
+ *                 out_array[i] = local_sum_ptr[0]
+ *         finally:
+ *             free(local_sum_ptr)             # <<<<<<<<<<<<<<
  * 
  *     return out_array
 */
-                free(__pyx_v_local_sum_ptr);
-                goto __pyx_L20;
+                /*finally:*/ {
+                  /*normal exit:*/{
+                    free(__pyx_v_local_sum_ptr);
+                    goto __pyx_L15;
+                  }
+                  __pyx_L14_error:;
+                  /*exception exit:*/{
+                    __Pyx_PyThreadState_declare
+                    PyGILState_STATE __pyx_gilstate_save;
+                    __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
+                    __Pyx_PyThreadState_assign
+                    __pyx_t_13 = 0; __pyx_t_14 = 0; __pyx_t_15 = 0; __pyx_t_16 = 0; __pyx_t_17 = 0; __pyx_t_18 = 0;
+                     __Pyx_ExceptionSwap(&__pyx_t_16, &__pyx_t_17, &__pyx_t_18);
+                    if ( unlikely(__Pyx_GetException(&__pyx_t_13, &__pyx_t_14, &__pyx_t_15) < 0)) __Pyx_ErrFetch(&__pyx_t_13, &__pyx_t_14, &__pyx_t_15);
+                    __Pyx_XGOTREF(__pyx_t_13);
+                    __Pyx_XGOTREF(__pyx_t_14);
+                    __Pyx_XGOTREF(__pyx_t_15);
+                    __Pyx_XGOTREF(__pyx_t_16);
+                    __Pyx_XGOTREF(__pyx_t_17);
+                    __Pyx_XGOTREF(__pyx_t_18);
+                    __pyx_t_4 = __pyx_lineno; __pyx_t_3 = __pyx_clineno; __pyx_t_12 = __pyx_filename;
+                    __Pyx_PyGILState_Release(__pyx_gilstate_save);
+                    {
+                      free(__pyx_v_local_sum_ptr);
+                    }
+                    __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
+                    __Pyx_PyThreadState_assign
+                    __Pyx_XGIVEREF(__pyx_t_16);
+                    __Pyx_XGIVEREF(__pyx_t_17);
+                    __Pyx_XGIVEREF(__pyx_t_18);
+                    __Pyx_ExceptionReset(__pyx_t_16, __pyx_t_17, __pyx_t_18);
+                    __Pyx_XGIVEREF(__pyx_t_13);
+                    __Pyx_XGIVEREF(__pyx_t_14);
+                    __Pyx_XGIVEREF(__pyx_t_15);
+                    __Pyx_ErrRestore(__pyx_t_13, __pyx_t_14, __pyx_t_15);
+                    __Pyx_PyGILState_Release(__pyx_gilstate_save);
+                    __pyx_t_13 = 0; __pyx_t_14 = 0; __pyx_t_15 = 0; __pyx_t_16 = 0; __pyx_t_17 = 0; __pyx_t_18 = 0;
+                    __pyx_lineno = __pyx_t_4; __pyx_clineno = __pyx_t_3; __pyx_filename = __pyx_t_12;
+                    goto __pyx_L8_error;
+                  }
+                  __pyx_L15:;
+                }
+                goto __pyx_L29;
                 __pyx_L8_error:;
                 {
                     PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
@@ -19313,8 +19371,8 @@ static PyObject *__pyx_pf_5hello_process_data_numba(CYTHON_UNUSED PyObject *__py
                     __Pyx_PyGILState_Release(__pyx_gilstate_save);
                 }
                 __pyx_parallel_why = 4;
-                goto __pyx_L20;
-                __pyx_L20:;
+                goto __pyx_L29;
+                __pyx_L29:;
                 #ifdef _OPENMP
                 Py_END_ALLOW_THREADS
                 #else
@@ -19322,6 +19380,12 @@ static PyObject *__pyx_pf_5hello_process_data_numba(CYTHON_UNUSED PyObject *__py
 PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
                 #endif /* _OPENMP */
                 /* Clean up any temporaries */
+                __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
+                __Pyx_XDECREF(__pyx_t_14); __pyx_t_14 = 0;
+                __Pyx_XDECREF(__pyx_t_15); __pyx_t_15 = 0;
+                __Pyx_XDECREF(__pyx_t_16); __pyx_t_16 = 0;
+                __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
+                __Pyx_XDECREF(__pyx_t_18); __pyx_t_18 = 0;
                 __Pyx_PyGILState_Release(__pyx_gilstate_save);
                 #ifndef _OPENMP
 }
@@ -19382,15 +19446,15 @@ PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
   }
 
   /* "hello.pyx":28
- *         free(local_sum_ptr)
+ *             free(local_sum_ptr)
  * 
  *     return out_array             # <<<<<<<<<<<<<<
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_12 = __pyx_memoryview_fromslice(__pyx_v_out_array, 1, (PyObject *(*)(char *)) __pyx_memview_get_double, (int (*)(char *, PyObject *)) __pyx_memview_set_double, 0);; if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 28, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_12);
-  __pyx_r = __pyx_t_12;
-  __pyx_t_12 = 0;
+  __pyx_t_19 = __pyx_memoryview_fromslice(__pyx_v_out_array, 1, (PyObject *(*)(char *)) __pyx_memview_get_double, (int (*)(char *, PyObject *)) __pyx_memview_set_double, 0);; if (unlikely(!__pyx_t_19)) __PYX_ERR(0, 28, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_19);
+  __pyx_r = __pyx_t_19;
+  __pyx_t_19 = 0;
   goto __pyx_L0;
 
   /* "hello.pyx":7
@@ -19403,7 +19467,7 @@ PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
 
   /* function exit code */
   __pyx_L1_error:;
-  __Pyx_XDECREF(__pyx_t_12);
+  __Pyx_XDECREF(__pyx_t_19);
   __Pyx_AddTraceback("hello.process_data_numba", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
@@ -21833,9 +21897,9 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
   PyObject* tuple_dedup_map = PyDict_New();
   if (unlikely(!tuple_dedup_map)) return -1;
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 7, 127};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 7, 130};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_data_array, __pyx_mstate->__pyx_n_u_out_array, __pyx_mstate->__pyx_n_u_i, __pyx_mstate->__pyx_n_u_j, __pyx_mstate->__pyx_n_u_height, __pyx_mstate->__pyx_n_u_width, __pyx_mstate->__pyx_n_u_local_sum_ptr};
-    __pyx_mstate_global->__pyx_codeobj_tab[0] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_build_raw_processing_hello_pyx, __pyx_mstate->__pyx_n_u_process_data_numba, __pyx_k_j_aq_ZvQa_A_q_q_U_1_QfJas_Rq_Qe, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[0])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[0] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_build_raw_processing_hello_pyx, __pyx_mstate->__pyx_n_u_process_data_numba, __pyx_k_j_aq_ZvQa_A_1A_Qe1_E_aq_3c_1_AQ, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[0])) goto bad;
   }
   Py_DECREF(tuple_dedup_map);
   return 0;
