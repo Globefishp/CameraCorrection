@@ -48,7 +48,31 @@ def process_data_V2(double[:, ::1] data_array, double[::1] out_array):
         for i in prange(height):
             local_sum = 0.0
             for j in range(width):
-                local_sum = local_sum + data_array[i, j] * j
+                local_sum = local_sum + data_array[i, j] * j 
+                # local_sum += ... will identify local_sum as a reduction variable
+                # which won't successfully compile: Cannot read reduction variable in loop body
+                # this is a limit of prange. reduction variables should only be write in one way (*=, += etc.)
+            out_array[i] = local_sum
+            
+    return out_array
+
+def process_data_test(double[:, ::1] data_array, double[::1] out_array):
+    '''
+    V2 version of process data
+    '''
+    cdef int i, j
+    cdef Py_ssize_t height = data_array.shape[0]
+    cdef Py_ssize_t width = data_array.shape[1]
+
+    # data_array is 2D, out_array is 1D
+    with nogil, parallel():
+        cdef double local_sum = 0.0
+        for i in prange(height):
+            for j in range(width):
+                local_sum = local_sum + data_array[i, j] * j 
+                # local_sum += ... will identify local_sum as a reduction variable
+                # which won't successfully compile: Cannot read reduction variable in loop body
+                # this is a limit of prange. reduction variables should only be write in one way (*=, += etc.)
             out_array[i] = local_sum
             
     return out_array

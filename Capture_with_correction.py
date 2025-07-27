@@ -8,13 +8,14 @@ from raw_processing_jit_V3 import raw_processing_jit_V3
 from raw_processing_jit_V3_1 import raw_processing_jit_V3_1
 from raw_processing_jit_V4 import raw_processing_jit_V4
 from raw_processing_jit_V5 import raw_processing_jit_V5
+from raw_processing_cy import raw_processing_cy
 import matplotlib.pyplot as plt
 import time
 import cProfile
 import pstats
 
-current_jit_func = raw_processing
-current_jit_func_name = 'raw_processing'
+current_jit_func = raw_processing_cy
+current_jit_func_name = 'raw_processing_cy'
 
 EXPOSURE_TIME = 10 # ms
 correction_info = np.load('./correction_results.npy', allow_pickle=True).item()
@@ -45,7 +46,7 @@ srgb_img = current_jit_func(img,
 plt.imsave('srgb_img.png', srgb_img)
 
 # 2. 多次运行并记录时间
-num_runs = 10
+num_runs = 500
 run_times = []
 print(f"\n--- 运行 {num_runs} 次 {current_jit_func_name} 函数并记录时间 ---")
 for _ in range(num_runs):
