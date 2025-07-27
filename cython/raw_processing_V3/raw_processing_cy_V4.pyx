@@ -142,37 +142,37 @@ cdef void cy_full_pipeline(
             if pattern_is_bggr:
                 if is_row_even and is_col_even: # Blue
                     b_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.25
-                    r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * 0.25
+                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.25
+                    r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * <float>0.25
                 elif is_row_even and not is_col_even: # Green
                     g_val = wb_line_curr[c_padded_inner]
-                    b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * 0.5
-                    r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.5
+                    b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * <float>0.5
+                    r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.5
                 elif not is_row_even and is_col_even: # Green
                     g_val = wb_line_curr[c_padded_inner]
-                    r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * 0.5
-                    b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.5
+                    r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * <float>0.5
+                    b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.5
                 else: # Red
                     r_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.25
-                    b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * 0.25
+                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.25
+                    b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * <float>0.25
             else: # RGGB
                 if is_row_even and is_col_even: # Red
                     r_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.25
-                    b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * 0.25
+                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.25
+                    b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * <float>0.25
                 elif is_row_even and not is_col_even: # Green
                     g_val = wb_line_curr[c_padded_inner]
-                    r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * 0.5
-                    b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.5
+                    r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * <float>0.5
+                    b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.5
                 elif not is_row_even and is_col_even: # Green
                     g_val = wb_line_curr[c_padded_inner]
-                    b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * 0.5
-                    r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.5
+                    b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) * <float>0.5
+                    r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.5
                 else: # Blue
                     b_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * 0.25
-                    r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * 0.25
+                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) * <float>0.25
+                    r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) * <float>0.25
 
             # CCM and Gamma
             r_norm = r_val / clip_max_level
@@ -235,13 +235,13 @@ cdef class RawV4Processor:
             for i in range(LUT_SIZE):
                 linear_input = <float>i / <float>(LUT_SIZE - 1)
                 if linear_input < 0.018:
-                    self.gamma_lut[i] = 4.5 * linear_input
+                    self.gamma_lut[i] = <float>4.5 * linear_input
                 else:
-                    self.gamma_lut[i] = 1.099 * powf(linear_input, 0.45) - 0.099
+                    self.gamma_lut[i] = <float>1.099 * powf(linear_input, 0.45) - <float>0.099
         else:
             raise NotImplementedError(f"Gamma '{gamma}' is not supported.")
 
-    def process(self, np.ndarray img) noexcept:
+    def process(self, np.ndarray img):
         """
         Processes a single Bayer RAW image frame.
         This method is designed to be called repeatedly in a loop.
