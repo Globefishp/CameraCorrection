@@ -3,6 +3,25 @@ import sys
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 import numpy
+import argparse # Added import
+
+# --- Argument parsing ---
+# Disable default help to avoid conflict with setuptools' --help
+parser = argparse.ArgumentParser(description='Build Cython modules.', add_help=False)
+parser.add_argument('--module', type=str, default='raw_processing_cy_V2',
+                    help='The name of the Cython module to compile (without .pyx extension).')
+
+# Parse known arguments, keeping setuptools arguments separate
+args, remaining_argv = parser.parse_known_args()
+
+# Restore sys.argv with only the necessary arguments for setuptools
+# sys.argv[0] is the script name itself.
+# remaining_argv contains arguments like 'build_ext', '--inplace', etc.
+sys.argv = [sys.argv[0]] + remaining_argv
+
+# Use the parsed module name
+module_name = args.module
+source_file = f"{module_name}.pyx"
 
 # --- 使用 clang-cl 在 Windows 上自动编译的配置 ---
 if sys.platform == 'win32':
@@ -45,23 +64,29 @@ if sys.platform == 'win32':
 extra_compile_args = []
 if sys.platform == 'win32':
     # Flags for MSVC / clang-cl. /arch:AVX2 is key for vectorization.
-    extra_compile_args = ['/Ox', 
-                          '/fp:fast', 
-                          '/openmp', 
+    extra_compile_args = ['/Ox',
+                          '/fp:fast',
+                          '/openmp',
                           '/arch:AVX2',
+                        #   '/Zi',
                           ]
 else:
     # Flags for GCC / Clang. -mavx2 is more explicit.
     extra_compile_args = ['-O3', '-ffast-math', '-march=native', '-fopenmp', '-mavx2']
 
-name = "raw_processing_cy_V2"
-# 创建 Extension 对象
+extra_link_args = [
+                #    '/DEBUG',
+                   ]
+
+# Create Extension object
+# Use the dynamic module_name and source_file
 ext_modules = [
     Extension(
-        name,
-        [f"{name}.pyx"],
+        module_name, # Use the dynamic name
+        [source_file], # Use the dynamic source file
         include_dirs=[numpy.get_include()],
         extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
     )
 ]
 
@@ -71,4 +96,6 @@ setup(
 
 # Copy to parent directory
 import shutil
-shutil.copy(f"{name}.cp313-win_amd64.pyd", f"../../{name}.cp313-win_amd64.pyd")
+# Update the copy path to use the dynamic module name
+# TODO: automatically determine the compile name (platform, python version)
+shutil.copy(f"{module_name}.cp313-win_amd64.pyd", f"../../{module_name}.cp313-win_amd64.pyd")

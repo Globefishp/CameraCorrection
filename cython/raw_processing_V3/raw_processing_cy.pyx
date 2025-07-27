@@ -2,10 +2,6 @@
 # 32.289 ± 0.739 ms
 # distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 
-import numpy as np
-cimport numpy as np
-from libc.math cimport round
-
 # Optional: turn off bounds checking and negative indexing for speed
 # This is generally safe when you know your indices are within bounds
 # cython: boundscheck=False
@@ -13,6 +9,13 @@ from libc.math cimport round
 # cython: cdivision=True
 # cython: initializedcheck=False
 # cython: nonecheck=False
+
+import numpy as np
+cimport numpy as np
+from libc.math cimport round
+
+
+# 400.030 ± 3.591 ms
 
 # This function remains outside JIT as it uses NumPy features not fully supported by Numba's AOT compilation
 def create_bt709_lut(size=65536): # 这里是否需要使用cdef？如果不用cdef，意思是效率和普通python一样的意思吗？
