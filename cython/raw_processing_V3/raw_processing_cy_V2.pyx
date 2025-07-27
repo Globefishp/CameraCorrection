@@ -49,7 +49,7 @@ BT709_LUT = c_create_bt709_lut()
 
 cdef inline float cy_get_padded_pixel_value(
     np.uint16_t[:, ::1] img,
-    int black_level, int r_padded, int c_padded, int H_orig, int W_orig) nogil:
+    int black_level, int r_padded, int c_padded, int H_orig, int W_orig):
     """
     Gets a pixel value from the original image, applying black level correction and reflect padding logic.
     r_padded, c_padded are the logical coordinates in the padded image.
@@ -77,7 +77,7 @@ cdef inline float cy_get_padded_pixel_value(
 cdef inline float cy_white_balance_pixel(
     float pixel_val, int r, int c,
     float r_gain, float g_gain, float b_gain, float r_dBLC, float g_dBLC, float b_dBLC,
-    bint pattern_is_bggr, float clip_max_level) nogil:
+    bint pattern_is_bggr, float clip_max_level):
     """
     Performs white balance for a single pixel.
     """
@@ -114,7 +114,7 @@ cdef void cy_full_pipeline(
     np.float32_t[:, :, ::1] final_img,
     np.float32_t[:, ::1] line_buffers,
     # np.float64_t[::1] timings # New parameter for timings
-    ) nogil:
+    ):
     """
     Processes a Bayer image to an RGB image using a fully fused, Cython-compiled pipeline with on-the-fly padding.
     """
