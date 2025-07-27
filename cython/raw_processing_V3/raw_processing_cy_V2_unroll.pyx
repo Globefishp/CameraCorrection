@@ -9,11 +9,11 @@
 # cython: initializedcheck=False
 # cython: nonecheck=False
 
-# 59.443 ± 2.153 ms
+# 33.428 ± 0.477 ms
 
 import numpy as np
 cimport numpy as np
-from libc.math cimport powf, fmaxf, fminf
+from libc.math cimport powf#, fmaxf, fminf
 
 # This function remains outside JIT as it uses NumPy features not fully supported by Numba's AOT compilation
 def create_bt709_lut(size=65536):
@@ -44,6 +44,11 @@ cdef np.ndarray[np.float32_t, ndim=1] c_create_bt709_lut(int size=65536):
     return lut
 
 BT709_LUT = c_create_bt709_lut()
+
+cdef inline float clip_0_1(float val) nogil:
+    if val < 0: val = 0
+    elif val > 1: val = 1
+    return val
 
 cdef inline float cy_get_padded_pixel_value(
     np.uint16_t[:, ::1] img,
@@ -97,7 +102,10 @@ cdef inline float cy_white_balance_pixel(
         else: # Green
             pixel_val = (pixel_val - g_dBLC) * g_gain
 
-    pixel_val = fmaxf(0.0, fminf(clip_max_level, pixel_val))
+    if pixel_val < 0:
+        pixel_val = 0
+    elif pixel_val > clip_max_level:
+        pixel_val = clip_max_level
 
     return pixel_val
 
@@ -172,7 +180,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner-1, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner-1, 1] = gamma_lut[g_idx]
@@ -183,7 +191,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner, 1] = gamma_lut[g_idx]
@@ -204,7 +212,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner-1, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner-1, 1] = gamma_lut[g_idx]
@@ -215,7 +223,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner, 1] = gamma_lut[g_idx]
@@ -237,7 +245,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner-1, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner-1, 1] = gamma_lut[g_idx]
@@ -248,7 +256,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner, 1] = gamma_lut[g_idx]
@@ -269,7 +277,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner-1, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner-1, 1] = gamma_lut[g_idx]
@@ -280,7 +288,7 @@ cdef void cy_full_pipeline(
                     r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
                     g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
                     b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-                    r_ccm = fmaxf(0.0, fminf(1.0, r_ccm)); g_ccm = fmaxf(0.0, fminf(1.0, g_ccm)); b_ccm = fmaxf(0.0, fminf(1.0, b_ccm))
+                    r_ccm = clip_0_1(r_ccm); g_ccm = clip_0_1(g_ccm); b_ccm = clip_0_1(b_ccm)
                     r_idx = <int>(r_ccm * lut_max_index + 0.5); g_idx = <int>(g_ccm * lut_max_index + 0.5); b_idx = <int>(b_ccm * lut_max_index + 0.5)
                     final_img[r_padded-1, c_padded_inner, 0] = gamma_lut[r_idx]
                     final_img[r_padded-1, c_padded_inner, 1] = gamma_lut[g_idx]

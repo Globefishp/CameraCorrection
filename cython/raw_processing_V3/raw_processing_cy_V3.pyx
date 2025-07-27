@@ -1,4 +1,5 @@
 # Big loop, padding on-the-fly, with parallelization
+# distutils: language = c++
 # distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 
 # Optional: turn off bounds checking and negative indexing for speed
@@ -9,14 +10,25 @@
 # cython: initializedcheck=False
 # cython: nonecheck=False
 
-# 31.810 ± 0.571 ms with noexcept nogil. faster than numba!!
+# rgb line buffer after line debayer
+# 138.852 ± 2.054 ms
+# 37.852 ± 0.698 ms after adding noexcept
+
 
 import cython
 import numpy as np
 cimport numpy as np
 from typing import Tuple
-from libc.math cimport powf#, fmaxf, fminf
-from libc.time cimport clock, clock_t, CLOCKS_PER_SEC
+from libc.math cimport powf
+from libcpp.vector cimport vector
+from cython.operator cimport dereference
+# from libc.stdlib cimport malloc, free # For nogil-compatible memory allocation
+# from libc.time cimport clock, clock_t, CLOCKS_PER_SEC
+
+cdef inline float clip_0_1(float val) noexcept nogil:
+    if val < 0: val = 0
+    elif val > 1: val = 1
+    return val
 
 # This function remains outside JIT as it uses NumPy features not fully supported by Numba's AOT compilation
 def create_bt709_lut(size=65536):
@@ -37,13 +49,13 @@ cdef np.ndarray[np.float32_t, ndim=1] c_create_bt709_lut(int size=65536) noexcep
     """
     cdef np.ndarray[np.float32_t, ndim=1] lut = np.empty(size, dtype=np.float32)
     cdef int i
-    cdef float linear_input
+    cdef float linear_input_f
     for i in range(size):
-        linear_input = <float>i / <float>(size - 1)
-        if linear_input < 0.018:
-            lut[i] = 4.5 * linear_input
+        linear_input_f = <float>i / <float>(size - 1)
+        if linear_input_f < 0.018:
+            lut[i] = 4.5 * linear_input_f
         else:
-            lut[i] = 1.099 * powf(linear_input, 0.45) - 0.099
+            lut[i] = 1.099 * powf(linear_input_f, 0.45) - 0.099
     return lut
 
 BT709_LUT = c_create_bt709_lut()
@@ -107,14 +119,80 @@ cdef inline float cy_white_balance_pixel(
 
     return pixel_val
 
+cdef inline (float, float, float) cy_debayer_pixel(
+    np.float32_t[::1] wb_line_prev, np.float32_t[::1] wb_line_curr, np.float32_t[::1] wb_line_next,
+    int c_padded_inner, bint is_row_even, bint is_col_even, bint pattern_is_bggr) noexcept nogil:
+    cdef float r_val, g_val, b_val
+
+    if pattern_is_bggr:
+        if is_row_even and is_col_even: # Blue
+            b_val = wb_line_curr[c_padded_inner]
+            g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
+            r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
+        elif is_row_even and not is_col_even: # Green
+            g_val = wb_line_curr[c_padded_inner]
+            b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
+            r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
+        elif not is_row_even and is_col_even: # Green
+            g_val = wb_line_curr[c_padded_inner]
+            r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
+            b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
+        else: # Red
+            r_val = wb_line_curr[c_padded_inner]
+            g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
+            b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
+    else: # RGGB
+        if is_row_even and is_col_even: # Red
+            r_val = wb_line_curr[c_padded_inner]
+            g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
+            b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
+        elif is_row_even and not is_col_even: # Green
+            g_val = wb_line_curr[c_padded_inner]
+            r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
+            b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
+        elif not is_row_even and is_col_even: # Green
+            g_val = wb_line_curr[c_padded_inner]
+            b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
+            r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
+        else: # Blue
+            b_val = wb_line_curr[c_padded_inner]
+            g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
+            r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
+    return r_val, g_val, b_val
+
+cdef inline (float, float, float) cy_ccm_gamma_pixel(
+    float r_val, float g_val, float b_val, float clip_max_level,
+    np.float32_t[:, ::1] conversion_mtx,
+    np.float32_t[::1] gamma_lut, int lut_max_index) noexcept nogil:
+    cdef float r_norm, g_norm, b_norm
+    cdef float r_ccm, g_ccm, b_ccm
+    cdef int r_idx, g_idx, b_idx
+
+    r_norm = r_val / clip_max_level
+    g_norm = g_val / clip_max_level
+    b_norm = b_val / clip_max_level
+
+    r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
+    g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
+    b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
+
+    r_ccm = clip_0_1(r_ccm)
+    g_ccm = clip_0_1(g_ccm)
+    b_ccm = clip_0_1(b_ccm)
+
+    r_idx = <int>(r_ccm * lut_max_index + 0.5)
+    g_idx = <int>(g_ccm * lut_max_index + 0.5)
+    b_idx = <int>(b_ccm * lut_max_index + 0.5)
+
+    return gamma_lut[r_idx], gamma_lut[g_idx], gamma_lut[b_idx]
+
 cdef void cy_full_pipeline(
     np.uint16_t[:, ::1] img, int black_level,
     float r_gain, float g_gain, float b_gain, float r_dBLC, float g_dBLC, float b_dBLC,
     bint pattern_is_bggr, float clip_max_level,
     np.float32_t[:, ::1] conversion_mtx, np.float32_t[::1] gamma_lut,
     np.float32_t[:, :, ::1] final_img,
-    np.float32_t[:, ::1] line_buffers,
-    # np.float64_t[::1] timings # New parameter for timings
+    np.float32_t[:, ::1] line_buffers
     ) noexcept nogil:
     """
     Processes a Bayer image to an RGB image using a fully fused, Cython-compiled pipeline with on-the-fly padding.
@@ -126,14 +204,16 @@ cdef void cy_full_pipeline(
     cdef int lut_max_index = <int>gamma_lut.shape[0] - 1
     cdef float inv_clip_max_level = 1.0 / clip_max_level
     cdef int r_padded, c_padded
-
+    cdef vector[vector[float]]* rgb_line_buffer_ptr
+    
     # cdef clock_t start_total, end_total
     # cdef clock_t start_wb_fill, end_wb_fill
     # cdef clock_t start_demosaic, end_demosaic
     # cdef clock_t start_ccm_gamma, end_ccm_gamma
 
     # start_total = clock()
-
+    rgb_line_buffer_ptr = new vector[vector[float]](W_orig, vector[float](3))
+    # try:
     # Initial fill of the first two line buffers (corresponding to padded_img rows 0 and 1)
     # start_wb_fill = clock()
     for c_padded in range(W_padded):
@@ -153,11 +233,10 @@ cdef void cy_full_pipeline(
     cdef int prev_idx, curr_idx, next_idx
     cdef np.float32_t[::1] wb_line_prev, wb_line_curr, wb_line_next
     cdef float r_val, g_val, b_val
+    cdef float final_r, final_g, final_b
     cdef bint is_row_even, is_col_even
-    cdef float r_norm, g_norm, b_norm
-    cdef float r_ccm, g_ccm, b_ccm
-    cdef int r_idx, g_idx, b_idx
     cdef int c_padded_inner
+    cdef int c_orig_inner
 
     for r_padded in range(1, H_padded - 1):
         # Thread-local variables
@@ -169,88 +248,48 @@ cdef void cy_full_pipeline(
         wb_line_next = line_buffers[next_idx]
 
         # Pre-calculate the next white-balanced line into wb_line_next buffer
-        # start_wb_fill = clock() # Accumulate time for WB fill in main loop
         for c_padded_inner in range(W_padded):
             wb_line_next[c_padded_inner] = cy_white_balance_pixel(
                 cy_get_padded_pixel_value(img, black_level, r_padded + 1, c_padded_inner, H_orig, W_orig),
                 r_padded + 1, c_padded_inner, r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, pattern_is_bggr, clip_max_level
             )
-        # timings[0] += <double>(clock() - start_wb_fill) / CLOCKS_PER_SEC # Accumulate
 
         # Process columns for the current output row (r_padded - 1)
-        # start_demosaic = clock() # Reset for next iteration
         for c_padded_inner in range(1, W_padded - 1):
+            c_orig_inner = c_padded_inner - 1
             is_row_even = ((r_padded - 1) % 2 == 0)
             is_col_even = ((c_padded_inner - 1) % 2 == 0)
 
             # Demosaicing
-            if pattern_is_bggr:
-                if is_row_even and is_col_even: # Blue
-                    b_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
-                    r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
-                elif is_row_even and not is_col_even: # Green
-                    g_val = wb_line_curr[c_padded_inner]
-                    b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
-                    r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
-                elif not is_row_even and is_col_even: # Green
-                    g_val = wb_line_curr[c_padded_inner]
-                    r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
-                    b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
-                else: # Red
-                    r_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
-                    b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
-            else: # RGGB
-                if is_row_even and is_col_even: # Red
-                    r_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
-                    b_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
-                elif is_row_even and not is_col_even: # Green
-                    g_val = wb_line_curr[c_padded_inner]
-                    r_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
-                    b_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
-                elif not is_row_even and is_col_even: # Green
-                    g_val = wb_line_curr[c_padded_inner]
-                    b_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1]) / <float>2.0
-                    r_val = (wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>2.0
-                else: # Blue
-                    b_val = wb_line_curr[c_padded_inner]
-                    g_val = (wb_line_curr[c_padded_inner-1] + wb_line_curr[c_padded_inner+1] + wb_line_prev[c_padded_inner] + wb_line_next[c_padded_inner]) / <float>4.0
-                    r_val = (wb_line_prev[c_padded_inner-1] + wb_line_prev[c_padded_inner+1] + wb_line_next[c_padded_inner-1] + wb_line_next[c_padded_inner+1]) / <float>4.0
+            r_val, g_val, b_val = cy_debayer_pixel(
+                wb_line_prev, wb_line_curr, wb_line_next,
+                c_padded_inner, is_row_even, is_col_even, pattern_is_bggr
+            )
+            dereference(rgb_line_buffer_ptr)[c_orig_inner][0] = r_val
+            dereference(rgb_line_buffer_ptr)[c_orig_inner][1] = g_val
+            dereference(rgb_line_buffer_ptr)[c_orig_inner][2] = b_val
 
-            # timings[1] += <double>(clock() - start_demosaic) / CLOCKS_PER_SEC # Accumulate demosaic time
-            
-            # CCM and Gamma
-            # start_ccm_gamma = clock() # This will be reset inside the loop
-            r_norm = r_val / clip_max_level
-            g_norm = g_val / clip_max_level
-            b_norm = b_val / clip_max_level
+        # CCM and Gamma for the current output row
+        for c_orig_inner in range(W_orig):
+            r_val = dereference(rgb_line_buffer_ptr)[c_orig_inner][0]
+            g_val = dereference(rgb_line_buffer_ptr)[c_orig_inner][1]
+            b_val = dereference(rgb_line_buffer_ptr)[c_orig_inner][2]
 
-            r_ccm = r_norm * conversion_mtx[0, 0] + g_norm * conversion_mtx[0, 1] + b_norm * conversion_mtx[0, 2]
-            g_ccm = r_norm * conversion_mtx[1, 0] + g_norm * conversion_mtx[1, 1] + b_norm * conversion_mtx[1, 2]
-            b_ccm = r_norm * conversion_mtx[2, 0] + g_norm * conversion_mtx[2, 1] + b_norm * conversion_mtx[2, 2]
-
-            if r_ccm < 0: r_ccm = 0
-            elif r_ccm > 1: r_ccm = 1
-            if g_ccm < 0: g_ccm = 0
-            elif g_ccm > 1: g_ccm = 1
-            if b_ccm < 0: b_ccm = 0
-            elif b_ccm > 1: b_ccm = 1
-
-            r_idx = <int>(r_ccm * lut_max_index + 0.5)
-            g_idx = <int>(g_ccm * lut_max_index + 0.5)
-            b_idx = <int>(b_ccm * lut_max_index + 0.5)
-
-            final_img[r_padded-1, c_padded_inner-1, 0] = gamma_lut[r_idx]
-            final_img[r_padded-1, c_padded_inner-1, 1] = gamma_lut[g_idx]
-            final_img[r_padded-1, c_padded_inner-1, 2] = gamma_lut[b_idx]
-    #     timings[2] += <double>(clock() - start_demosaic) / CLOCKS_PER_SEC # Accumulate Debayer CCM/Gamma time
+            final_r, final_g, final_b = cy_ccm_gamma_pixel(
+                r_val, g_val, b_val, clip_max_level,
+                conversion_mtx,
+                gamma_lut, lut_max_index
+            )
+            final_img[r_padded-1, c_orig_inner, 0] = final_r
+            final_img[r_padded-1, c_orig_inner, 1] = final_g
+            final_img[r_padded-1, c_orig_inner, 2] = final_b
+    # finally:
+    del rgb_line_buffer_ptr
 
     # end_total = clock()
     # timings[3] = <double>(end_total - start_total) / CLOCKS_PER_SEC # Total time
 
-def raw_processing_cy_V2(img: np.ndarray,
+def raw_processing_cy_V3(img: np.ndarray,
                          black_level: int,
                          ADC_max_level: int,
                          bayer_pattern: str,
@@ -284,6 +323,7 @@ def raw_processing_cy_V2(img: np.ndarray,
     cdef int W_padded = W_orig + 2
     cdef np.ndarray[np.float32_t, ndim=3] final_float = np.empty((H_orig, W_orig, 3), dtype=np.float32)
     cdef np.ndarray[np.float32_t, ndim=2] line_buffers = np.empty((3, W_padded), dtype=np.float32)
+
     # Timings array: [WB_fill_time, Demosaic_time, CCM_Gamma_time, Total_time]
     # cdef np.ndarray[np.float64_t, ndim=1] timings_array = np.zeros(4, dtype=np.float64)
 
