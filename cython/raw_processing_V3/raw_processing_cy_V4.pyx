@@ -9,6 +9,7 @@
 # cython: initializedcheck=False
 # cython: nonecheck=False
 
+# C-style class. Prevent overhead slightly.
 # 31.555 ± 0.649 ms
 
 import cython
