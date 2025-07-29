@@ -24,7 +24,7 @@
 import cython
 import numpy as np
 cimport numpy as np
-from cython.parallel cimport prange
+# from cython.parallel cimport prange # OpenMP functions can be used by cimporting openmp
 from libc.math cimport powf
 
 # ==============================================================================
@@ -40,35 +40,45 @@ cdef inline float clip_0_1(float x) noexcept nogil:
         return 1
     else:
         return x
+    
+cdef inline float clip_0_maxlevel(float x, float max_level) noexcept nogil:
+    if x < 0:
+        return 0
+    elif x > max_level:
+        return max_level
+    else:
+        return x
 
-cdef inline float _get_pixel_v6(
+cdef inline np.uint16_t _get_pixel_v6(
     np.uint16_t[:, ::1] img, int r_orig, int c_orig, int H_orig, int W_orig) noexcept nogil:
     """
-    安全地获取像素值，并应用等效于宽度为2的反射padding。
-    这是为4通道重排特别设计的，因为一个4通道像素块对应原始2x2区域。
+    安全地获取超过原始Bayer图像边界的像素值，使用reflect方法
+    
     params:
     img: 原始Bayer图像，uint16_t类型。大小(H_orig, W_orig)
     r_orig, c_orig: 希望获取的原始图像中的像素坐标。
     H_orig, W_orig: 原始图像的高度和宽度。
 
     return:
-    安全获取的像素值，类型为float。
+    安全获取的像素值，类型为uint16_t。
     """
-    # Reflect padding for r
-    if r_orig < 0: r_orig = -r_orig - 1
-    elif r_orig >= H_orig: r_orig = (H_orig - 1) - (r_orig - H_orig)
+    if r_orig < 0:
+        r_orig = -r_orig
+    elif r_orig >= H_orig:
+        r_orig = H_orig - 2 - (r_orig - H_orig)
 
-    # Reflect padding for c
-    if c_orig < 0: c_orig = -c_orig - 1
-    elif c_orig >= W_orig: c_orig = (W_orig - 1) - (c_orig - W_orig)
+    if c_orig < 0:
+        c_orig = -c_orig
+    elif c_orig >= W_orig:
+        c_orig = W_orig - 2 - (c_orig - W_orig)
 
-    return <float>img[r_orig, c_orig]
+    return img[r_orig, c_orig]
 
 cdef void _rearrange_and_pad(
     np.uint16_t[:, ::1] img,
-    np.float32_t[:, :, ::1] rearranged_4ch,
+    np.float32_t[:, :, ::1] raw_4ch,
     int black_level,
-    ) noexcept nogil:
+    ):
     """
     原始Bayer图重排为一个带四边各1像素padding的Bayer4通道图。
     可能可以并行
@@ -83,25 +93,26 @@ cdef void _rearrange_and_pad(
     """
     cdef int H_orig = img.shape[0]
     cdef int W_orig = img.shape[1]
-    cdef int H_re = rearranged_4ch.shape[0]
-    cdef int W_re = rearranged_4ch.shape[1]
+    cdef int H_re = raw_4ch.shape[0]
+    cdef int W_re = raw_4ch.shape[2]
     cdef int r_re, c_re, r_orig, c_orig
     cdef float p00, p01, p10, p11
 
-    for r_re in prange(H_re, schedule='static'):
+    for r_re in range(H_re):
         r_orig = 2 * (r_re - 1)
         for c_re in range(W_re):
             c_orig = 2 * (c_re - 1)
             
-            p00 = _get_pixel_v6(img, r_orig,     c_orig,     H_orig, W_orig) - black_level
-            p01 = _get_pixel_v6(img, r_orig,     c_orig + 1, H_orig, W_orig) - black_level
-            p10 = _get_pixel_v6(img, r_orig + 1, c_orig,     H_orig, W_orig) - black_level
-            p11 = _get_pixel_v6(img, r_orig + 1, c_orig + 1, H_orig, W_orig) - black_level
+            p00 = <float>(_get_pixel_v6(img, r_orig,     c_orig,     H_orig, W_orig) - black_level)
+            p01 = <float>(_get_pixel_v6(img, r_orig,     c_orig + 1, H_orig, W_orig) - black_level)
+            p10 = <float>(_get_pixel_v6(img, r_orig + 1, c_orig,     H_orig, W_orig) - black_level)
+            p11 = <float>(_get_pixel_v6(img, r_orig + 1, c_orig + 1, H_orig, W_orig) - black_level)
 
-            rearranged_4ch[r_re, 0, c_re] = p00 # B
-            rearranged_4ch[r_re, 1, c_re] = p01 # G1
-            rearranged_4ch[r_re, 2, c_re] = p10 # G2
-            rearranged_4ch[r_re, 3, c_re] = p11 # R
+            raw_4ch[r_re, 0, c_re] = p00 # B
+            raw_4ch[r_re, 1, c_re] = p01 # G1
+            raw_4ch[r_re, 2, c_re] = p10 # G2
+            raw_4ch[r_re, 3, c_re] = p11 # R
+    # print(r_re, c_re, raw_4ch[r_re, 0, c_re])
 
 cdef void _white_balance_inplace(
     np.float32_t[:, :, ::1] raw_4ch,
@@ -116,40 +127,77 @@ cdef void _white_balance_inplace(
     raw_4ch: 入参，出参，Bayer4通道浮点图，float32_t类型。大小(H_orig/2+2, 4, W_orig/2+2) (HCW格式)
     r_gain, g_gain, b_gain: 红、绿、蓝通道的增益，float类型。
     r_dBLC, g_dBLC, b_dBLC: 红、绿、蓝通道的dBLC值，float类型。
-    clip_max_level: Bayer图像Clip的电平上限，请将int强制转换成float类型再输入。
+    clip_max_level: Bayer图像Clip的电平上限，用于归一化，请将int强制转换成float类型再输入。
     ch_R, ch_G1, ch_G2, ch_B: R, G1, G2, B在Bayer4通道图中的通道号索引，int类型。
     """
     cdef int H_re = raw_4ch.shape[0]
-    cdef int W_re = raw_4ch.shape[1]
+    cdef int W_re = raw_4ch.shape[2]
     cdef int r_re, c_re
     cdef float val
 
-    for r_re in prange(H_re, schedule='static'):
+    for r_re in range(H_re):
         # 这里RGGB没有数据依赖性，可以并行也许。思考优化。
         for c_re in range(W_re):
             # Blue
             val = (raw_4ch[r_re, ch_B, c_re] - b_dBLC) * b_gain
-            if val < 0: val = 0
-            elif val > clip_max_level: val = clip_max_level
+            val = clip_0_maxlevel(val, clip_max_level)
             raw_4ch[r_re, ch_B, c_re] = val
             
             # Green 1
             val = (raw_4ch[r_re, ch_G1, c_re] - g_dBLC) * g_gain
-            if val < 0: val = 0
-            elif val > clip_max_level: val = clip_max_level
+            val = clip_0_maxlevel(val, clip_max_level)
             raw_4ch[r_re, ch_G1, c_re] = val
 
             # Green 2
             val = (raw_4ch[r_re, ch_G2, c_re] - g_dBLC) * g_gain
-            if val < 0: val = 0
-            elif val > clip_max_level: val = clip_max_level
+            val = clip_0_maxlevel(val, clip_max_level)
             raw_4ch[r_re, ch_G2, c_re] = val
 
             # Red
             val = (raw_4ch[r_re, ch_R, c_re] - r_dBLC) * r_gain
-            if val < 0: val = 0
-            elif val > clip_max_level: val = clip_max_level
+            val = clip_0_maxlevel(val, clip_max_level)
             raw_4ch[r_re, ch_R, c_re] = val
+
+cdef inline void _white_balance_row_inplace( # 直接抄之前的inplace函数
+    float [:, ::1] raw_4ch_lines,            # 输入兼输出: 未经白平衡的单行4通道数据
+    const float r_gain, const float g_gain, const float b_gain, const float r_dBLC, const float g_dBLC, const float b_dBLC,
+    const float clip_max_level,
+    const bint pattern_is_bggr                   # Bayer pattern
+    ):
+    """
+    在单行4通道缓冲上原地执行白平衡。这是一个独立的、无延迟的步骤。
+    params:
+    raw_4ch_row: 入参，出参，4通道浮点图，float32_t类型。大小(4, W_re) (CW格式)
+    r_gain, g_gain, b_gain: 白平衡增益
+    r_dBLC, g_dBLC, b_dBLC: 白平衡 dBLC
+    clip_max_level: Bayer图像Clip的电平上限，用于归一化，请将int强制转换成float类型再输入。
+    pattern_is_bggr: Bayer pattern 定义。
+    """
+    cdef int W_re = raw_4ch_lines.shape[1]
+    cdef int c_re
+    # 定义4通道
+    cdef int ch_B, ch_G1, ch_G2, ch_R
+    if pattern_is_bggr:
+        ch_B = 0
+        ch_G1 = 1
+        ch_G2 = 2
+        ch_R = 3
+    else:
+        ch_B = 2
+        ch_G1 = 1
+        ch_G2 = 0
+        ch_R = 3
+
+    for c_re in range(W_re):
+        raw_4ch_lines[ch_B, c_re] = (raw_4ch_lines[ch_B, c_re] - b_dBLC) * b_gain
+        raw_4ch_lines[ch_G1, c_re] = (raw_4ch_lines[ch_G1, c_re] - g_dBLC) * g_gain
+        raw_4ch_lines[ch_G2, c_re] = (raw_4ch_lines[ch_G2, c_re] - g_dBLC) * g_gain
+        raw_4ch_lines[ch_R, c_re] = (raw_4ch_lines[ch_R, c_re] - r_dBLC) * r_gain
+        # 裁剪到[0, clip_max_level]范围
+        raw_4ch_lines[ch_B, c_re] = clip_0_maxlevel(raw_4ch_lines[ch_B, c_re], clip_max_level)
+        raw_4ch_lines[ch_G1, c_re] = clip_0_maxlevel(raw_4ch_lines[ch_G1, c_re], clip_max_level)
+        raw_4ch_lines[ch_G2, c_re] = clip_0_maxlevel(raw_4ch_lines[ch_G2, c_re], clip_max_level)
+        raw_4ch_lines[ch_R, c_re] = clip_0_maxlevel(raw_4ch_lines[ch_R, c_re], clip_max_level)
 
 # ==============================================================================
 # 2. 计算流水线核心 (Processing Pipeline Core)
@@ -164,10 +212,10 @@ cdef inline void _debayer_gather_rows(
     float[:, ::1] line_curr_4ch,
     float[:, ::1] line_next_4ch,
     np.float32_t[:, :, ::1] rgb_line_buffer, # (2, 3, W_out)
-    int W_out, bint pattern_is_bggr) noexcept nogil:
+    int W_out, bint pattern_is_bggr):
     """
     使用收集(Gather)模式，根据3行4通道输入，计算2行RGB输出。
-    核心逻辑硬编码为处理BGGR物理位置，通过交换输出指针适应RGGB。
+    核心逻辑硬编码为处理BGGR物理位置->RGB，通过交换输出指针适应RGGB。
 
     params:
     line_prev_4ch: 入参，前一行4通道缓冲区，float32_t类型。大小(4, W_orig/2+2) (CW格式)
@@ -185,7 +233,7 @@ cdef inline void _debayer_gather_rows(
     cdef int even = 0, odd = 1
     # 定义4通道缓冲的物理通道索引 (p00, p01, p10, p11)
     cdef int ch_p00 = 0, ch_p01 = 1, ch_p10 = 2, ch_p11 = 3
-    
+
     cdef float[::1] even_r_line = rgb_line_buffer[0, 0]
     cdef float[::1] even_g_line = rgb_line_buffer[0, 1]
     cdef float[::1] even_b_line = rgb_line_buffer[0, 2]
@@ -234,7 +282,7 @@ cdef inline void _ccm_gamma_gather_rows(
     int r_out_start, int W_orig,
     np.float32_t[:, ::1] conversion_mtx,
     np.float32_t[::1] gamma_lut,
-    float inv_clip_max_level) noexcept nogil:
+    float inv_clip_max_level):
     """
     在2行RGB缓冲上执行CCM和Gamma校正，并存入最终图像。
     params:
@@ -257,9 +305,9 @@ cdef inline void _ccm_gamma_gather_rows(
     # TODO: 我来做，后续进行SIMD friendly 排列。
     for r_offset in range(2):
         for c_out in range(W_orig):
-            r_val = rgb_line_buffer[r_offset, c_out, 0] * inv_clip_max_level
-            g_val = rgb_line_buffer[r_offset, c_out, 1] * inv_clip_max_level
-            b_val = rgb_line_buffer[r_offset, c_out, 2] * inv_clip_max_level
+            r_val = rgb_line_buffer[r_offset, 0, c_out] * inv_clip_max_level
+            g_val = rgb_line_buffer[r_offset, 1, c_out] * inv_clip_max_level
+            b_val = rgb_line_buffer[r_offset, 2, c_out] * inv_clip_max_level
 
             r_ccm = r_val * m00 + g_val * m01 + b_val * m02
             g_ccm = r_val * m10 + g_val * m11 + b_val * m12
@@ -286,30 +334,32 @@ cdef void _run_pipeline_gather(
 
     np.float32_t[:, ::1] conversion_mtx,
     np.float32_t[::1] gamma_lut,
-    float inv_clip_max_level,
+    int clip_max_level,
     bint pattern_is_bggr,
 
     np.float32_t[:, :, ::1] lines_buffer_4ch, # (3, 4, W_orig // 2 + 2)
     np.float32_t[:, :, ::1] rgb_line_buffer, # (2, 3, W_orig)
-    ) noexcept nogil:
+    ):
     """
     使用收集(Gather)模式的完整流水线。
     params:
-    raw_4ch: 入参，原始4通道Bayer图像，float32_t类型。大小(H_orig, W_orig, 4) (HCW格式)
+    raw_4ch: 入参，原始4通道Bayer图像，float32_t类型。大小(H_orig, 4, W_orig) (HCW格式)
     final_img: 出参，最终的RGB图像，float32_t类型。大小(H_orig, 3, W_orig) (HCW格式)
 
     conversion_mtx: 入参，3x3 CCM转换矩阵，float类型。
     gamma_lut: 入参，Gamma查找表，float类型。大小(65536,)
-    inv_clip_max_level: 入参，clip_max_level的倒数，float类型。
+    clip_max_level: 入参，最大ADC值，用于裁切，int类型。
     pattern_is_bggr: 入参，Bayer模式是否为BGGR，bool类型。
 
-    lines_buffer_4ch: 入参，4通道Bayer图像行缓冲，float32_t类型。大小(3, 4, W_orig // 2 + 2) (HWC格式)
+    lines_buffer_4ch: 入参，4通道Bayer图像行缓冲，float32_t类型。大小(3, 4, W_orig // 2 + 2) (HCW格式)
     rgb_line_buffer: 入参，2行RGB图，float32_t类型。大小(2, 3, W_orig) (HCW格式)
     """
     cdef int H_re = raw_4ch.shape[0]
-    cdef int W_re = raw_4ch.shape[1]
-    cdef int W_orig = final_img.shape[1]
+    cdef int W_re = raw_4ch.shape[2]
+    cdef int W_out = final_img.shape[2]
     cdef int r_re
+
+    cdef float inv_clip_max_level = 1.0 / clip_max_level
 
     # --- 缓冲分配 ---
 
@@ -328,16 +378,17 @@ cdef void _run_pipeline_gather(
     for r_re in range(1, H_re - 1):
         # 加载新的一行
         line_next_4ch = raw_4ch[r_re + 1]
+        # print(r_re, line_next_4ch[0, 100])
 
         # Debayer (Gather)
         _debayer_gather_rows(
             line_prev_4ch, line_curr_4ch, line_next_4ch, 
-            rgb_line_buffer, W_orig, pattern_is_bggr
+            rgb_line_buffer, W_out, pattern_is_bggr
             )
 
         # CCM, Gamma & Store
         _ccm_gamma_gather_rows(
-            rgb_line_buffer, final_img, 2 * (r_re - 1), W_orig,
+            rgb_line_buffer, final_img, 2 * (r_re - 1), W_out,
             conversion_mtx, gamma_lut, inv_clip_max_level
         )
 
@@ -351,52 +402,13 @@ cdef void _run_pipeline_gather(
 # 2.2 SCATTER MODE IMPLEMENTATION
 # ------------------------------------------------------------------------------
 
-cdef inline void _white_balance_row_inplace( # 直接抄之前的inplace函数
-    float [:, ::1] raw_4ch_lines,            # 输入兼输出: 未经白平衡的单行4通道数据
-    const float r_gain, const float g_gain, const float b_gain, const float r_dBLC, const float g_dBLC, const float b_dBLC,
-    bint pattern_is_bggr                   # Bayer pattern
-    ) noexcept nogil:
-    """
-    在单行4通道缓冲上原地执行白平衡。这是一个独立的、无延迟的步骤。
-    params:
-    raw_4ch_row: 入参，出参，4通道浮点图，float32_t类型。大小(4, W_re) (CW格式)
-    r_gain, g_gain, b_gain: 白平衡增益
-    r_dBLC, g_dBLC, b_dBLC: 白平衡 dBLC
-    pattern_is_bggr: Bayer pattern 定义。
-    """
-    cdef int W_re = raw_4ch_lines.shape[1]
-    cdef int c_re
-    # 定义4通道
-    cdef int ch_B, ch_G1, ch_G2, ch_R
-    if pattern_is_bggr:
-        ch_B = 0
-        ch_G1 = 1
-        ch_G2 = 2
-        ch_R = 3
-    else:
-        ch_B = 2
-        ch_G1 = 1
-        ch_G2 = 0
-        ch_R = 3
-    
-    for c_re in prange(W_re, schedule='static'):
-        raw_4ch_lines[ch_B, c_re] = (raw_4ch_lines[ch_B, c_re] - b_dBLC) * b_gain
-        raw_4ch_lines[ch_G1, c_re] = (raw_4ch_lines[ch_G1, c_re] - g_dBLC) * g_gain
-        raw_4ch_lines[ch_G2, c_re] = (raw_4ch_lines[ch_G2, c_re] - g_dBLC) * g_gain
-        raw_4ch_lines[ch_R, c_re] = (raw_4ch_lines[ch_R, c_re] - r_dBLC) * r_gain
-        # 裁剪到[0, 1]范围
-        raw_4ch_lines[ch_B, c_re] = clip_0_1(raw_4ch_lines[ch_B, c_re])
-        raw_4ch_lines[ch_G1, c_re] = clip_0_1(raw_4ch_lines[ch_G1, c_re])
-        raw_4ch_lines[ch_G2, c_re] = clip_0_1(raw_4ch_lines[ch_G2, c_re])
-        raw_4ch_lines[ch_R, c_re] = clip_0_1(raw_4ch_lines[ch_R, c_re])
-
 cdef inline void _debayer_scatter_row(
     const float [:, ::1] wb_4ch_row, # Shape (4, W_re)
     int r_re,
     float [:, :, ::1] final_img_padded, # Shape (H_orig + Y_PADDING, 3, W_orig + X_PADDING)
     int Y_PADDING,
     int X_PADDING   
-    ) noexcept nogil:
+    ):
     """
     处理单行已经白平衡的4通道数据，将其贡献扩散累加到输出缓冲。
     这是扩散模式最核心的计算函数。
@@ -410,7 +422,7 @@ cdef inline void _debayer_scatter_row(
     cdef int ch_p00 = 0, ch_p01 = 1, ch_p10 = 2, ch_p11 = 3
 
     # 遍历当前行的所有 2x2 像素块，值将会溢出到外围一圈（一行宽度）
-    for c_re in prange(W_re, schedule='static'): # 此处必须完整遍历pad四通道的宽度，才能得到正确的边缘像素值。
+    for c_re in range(W_re): # 此处必须完整遍历pad四通道的宽度，才能得到正确的边缘像素值。
         # 1. 读取4通道值
         B  = wb_4ch_row[ch_p00, c_re]
         G1 = wb_4ch_row[ch_p01, c_re]
@@ -481,7 +493,7 @@ cdef inline void _process_CCM_gamma_scatter_rows(
     const float[3][3] ccm,
     const float[::1] gamma_lut,
     float inv_clip_max_level
-    ) noexcept nogil:
+    ):
     cdef int c_out, r_idx, g_idx, b_idx
     cdef float r_val, g_val, b_val, r_ccm, g_ccm, b_ccm
     cdef int lut_max_index = gamma_lut.shape[0] - 1
@@ -493,7 +505,7 @@ cdef inline void _process_CCM_gamma_scatter_rows(
 
     for r_offset in range(2):
         y_idx = y_to_calculate + r_offset
-        for c_out in prange(W_padded, schedule='static'):
+        for c_out in range(W_padded):
             r_val = final_img_padded[y_idx][0][c_out]
             g_val = final_img_padded[y_idx][1][c_out]
             b_val = final_img_padded[y_idx][2][c_out]
@@ -523,10 +535,10 @@ cdef void _run_pipeline_scatter(
     const float[3][3] ccm,
     const np.float32_t [::1] gamma_lut,
     bint pattern_is_bggr,
-    float inv_clip_max_level,
+    const int clip_max_level,
     int Y_PADDING, int X_PADDING,
     float[:, ::1] line_buf_4ch_wb, # (4, W_re)
-    ) noexcept nogil:
+    ):
     '''
     执行完整的流水线，包括行白平衡、扩散Debayer、CCM转换和gamma校正。
     
@@ -539,31 +551,35 @@ cdef void _run_pipeline_scatter(
     ccm: 颜色转换矩阵，以3x3的float数组形式传入。
     gamma_lut: gamma校正查找表，index应为int16范围(size=65536)。
     pattern_is_bggr: 布尔值，指示是否为BGGR模式。
-    inv_clip_max_level: 最大像素值的倒数。
-    Y_PADDING, X_PADDING: 填充的Y和X方向大小，应该均为6。这可能是一个优化点。
+    clip_max_level: 最大像素值。
+    Y_PADDING, X_PADDING: 填充的Y和X方向总大小，两侧对称。这可能是一个优化点。
 
     line_buf_4ch_wb: 用于行白平衡的缓冲区，大小为(4, W_re)。
     '''
     cdef int H_re = raw_4ch.shape[0]
-    cdef int W_re = raw_4ch.shape[1]
+    cdef int W_re = raw_4ch.shape[2]
     cdef int W_padded = final_img_padded.shape[2]
     cdef int r_re, y_to_calculate
+    cdef float inv_clip_max_level = 1.0 / clip_max_level
 
     for r_re in range(H_re): # 必须把所有padding都计算完，才能使内圈effective区域的结果正确。
         # 阶段 A: Inplace行白平衡
         _white_balance_row_inplace(raw_4ch[r_re], 
-            r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, pattern_is_bggr)
-        
+            r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, clip_max_level, pattern_is_bggr)
+
         # 阶段 B: 扩散Debayer
         _debayer_scatter_row(line_buf_4ch_wb, r_re, final_img_padded, Y_PADDING, X_PADDING)
 
+        # print('working on:', r_re)
         # 阶段 C: 弹出并后处理 (Pop & Process)
         # 根据数据依赖，在处理完 r_re 后，起始于 2*r_re-3 的两行数据已就绪。
-        y_to_calculate = (2 * r_re - 3) + Y_PADDING
+        y_to_calculate = (2 * r_re - 3) + Y_PADDING // 2
         _process_CCM_gamma_scatter_rows(
             final_img_padded, y_to_calculate, W_padded,
             ccm, gamma_lut, inv_clip_max_level
         )
+        # print(r_re, H_re, y_to_calculate)
+
 
 
 # ==============================================================================
@@ -590,16 +606,15 @@ cdef void cy_full_pipeline_v6_scatter(
 
     int black_level,
     float r_gain, float g_gain, float b_gain, float r_dBLC, float g_dBLC, float b_dBLC,
-    bint pattern_is_bggr, float clip_max_level,
+    bint pattern_is_bggr, int clip_max_level,
     const np.float32_t[:, ::1] conversion_mtx, const np.float32_t [::1] gamma_lut,
     int Y_PADDING, int X_PADDING,
 
     np.float32_t[:, :, ::1] raw_4ch, # (H_orig//2+2, 4, W_orig//2+2)
     float[:, ::1] line_buf_4ch_wb, # (4, W_orig//2+2), 行白平衡缓冲区
-    ) noexcept nogil:
+    ):
     """ V6版完整流水线 (Scatter Mode) """
 
-    cdef float inv_clip_max_level = 1.0 / clip_max_level
     cdef float[3][3] ccm_data # 创建一个栈上空间
 
     # 根据条件，将 conversion_mtx 的数据“复制”到新的 ccm 中
@@ -613,7 +628,6 @@ cdef void cy_full_pipeline_v6_scatter(
             ccm_data[0][j] = conversion_mtx[2, j]
             ccm_data[1][j] = conversion_mtx[1, j]
             ccm_data[2][j] = conversion_mtx[0, j]
-
     
     # 步骤 1: 全局重排与Padding (不进行白平衡)
     _rearrange_and_pad(img, raw_4ch, black_level)
@@ -623,7 +637,7 @@ cdef void cy_full_pipeline_v6_scatter(
         raw_4ch, final_img_padded,
         r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, 
         ccm_data, gamma_lut,
-        pattern_is_bggr, inv_clip_max_level,
+        pattern_is_bggr, clip_max_level,
         Y_PADDING, X_PADDING,
         line_buf_4ch_wb
     )
@@ -634,20 +648,20 @@ cdef void cy_full_pipeline_v6_gather(
 
     int black_level,
     float r_gain, float g_gain, float b_gain, float r_dBLC, float g_dBLC, float b_dBLC,
-    bint pattern_is_bggr, float clip_max_level,
+    bint pattern_is_bggr, int clip_max_level,
     np.float32_t[:, ::1] conversion_mtx, np.float32_t[::1] gamma_lut,
 
     np.float32_t[:, :, ::1] raw_4ch,
     np.float32_t[:, :, ::1] lines_buffer_4ch,
     np.float32_t[:, :, ::1] rgb_line_buffer # (2, 3, W_orig)
-    ) noexcept nogil:
+    ):
     """
     V6版完整流水线，编排所有计算步骤。
     """
-    cdef float inv_clip_max_level = 1.0 / clip_max_level
+
     cdef float[:, ::1] ccm = conversion_mtx
 
-    # 步骤 0: 准备CCM, 如果是RGGB，我们需要交换CCM的R和B列来匹配Debayer输出的RGB顺序
+    # 步骤 0: 准备CCM, 如果是BGGR，我们需要交换CCM的R和B列来匹配Debayer输出的RGB顺序
     if pattern_is_bggr:
         ccm = conversion_mtx
     else:
@@ -655,21 +669,23 @@ cdef void cy_full_pipeline_v6_gather(
         ccm[1] = conversion_mtx[1]
         ccm[2] = conversion_mtx[0]
 
+
     # 步骤 1: 全局重排与Padding
     _rearrange_and_pad(img, raw_4ch, black_level)
+    # print(raw_4ch[1000, 0, 1000])
 
     # 步骤 2: 原地白平衡
     if pattern_is_bggr:
         _white_balance_inplace(raw_4ch, r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, clip_max_level, 
-        0, 1, 2, 3
+        3, 1, 2, 0
         )
     else:
         _white_balance_inplace(raw_4ch, r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, clip_max_level, 
-        3, 1, 2, 0
+        0, 1, 2, 3
         )
 
     # 步骤 3: 运行基于行缓冲的计算流水线 (当前为Gather模式)
-    _run_pipeline_gather(raw_4ch, final_img, ccm, gamma_lut, inv_clip_max_level, pattern_is_bggr,
+    _run_pipeline_gather(raw_4ch, final_img, ccm, gamma_lut, clip_max_level, pattern_is_bggr,
         lines_buffer_4ch, rgb_line_buffer
     )
 
@@ -698,7 +714,7 @@ def raw_processing_cy_V6(img: np.ndarray,
     cdef float r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC
     r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC = wb_params
     cdef bint pattern_is_bggr = (bayer_pattern == 'BGGR')
-    cdef float clip_max_level = <float>(ADC_max_level - black_level)
+    cdef int clip_max_level = ADC_max_level - black_level
     cdef np.ndarray[np.float32_t, ndim=2] conversion_mtx = np.dot(c_render_mtx, c_fwd_mtx)
 
     # --- 内存分配 ---
@@ -712,7 +728,7 @@ def raw_processing_cy_V6(img: np.ndarray,
 
     # --- 内存分配 (Gather) ---
     cdef np.ndarray[np.float32_t, ndim=3] lines_buffer_4ch_gather = np.empty((3, 4, W_orig // 2 + 2), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=3] rgb_line_buffer_gather = np.empty((2, W_orig, 3), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=3] rgb_line_buffer_gather = np.empty((2, 3, W_orig), dtype=np.float32)
     cdef np.ndarray[np.float32_t, ndim=3] final_img_gather = np.empty((H_orig, 3, W_orig), dtype=np.float32)
     # --- 内存分配 (Scatter) ---
     cdef int Y_PADDING = 6 # 这部分扩大我精心计算了，是这样的。
@@ -739,7 +755,7 @@ def raw_processing_cy_V6(img: np.ndarray,
                                     Y_PADDING, X_PADDING,
                                     raw_4ch, line_buf_4ch_scatter
                                     )
-        
+
         # 返回时切掉padding
         return np.ascontiguousarray(final_img_padded_scatter[Y_PADDING // 2: Y_PADDING//2 + H_orig, :, X_PADDING // 2: X_PADDING // 2 + W_orig].transpose(0, 2, 1))
 

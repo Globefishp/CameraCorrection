@@ -13,13 +13,15 @@ from raw_processing_cy_V2 import raw_processing_cy_V2
 from raw_processing_cy_V2_unroll import raw_processing_cy_V2_unroll
 from raw_processing_cy_V3 import raw_processing_cy_V3
 from raw_processing_cy_V4 import RawV4Processor
+from raw_processing_cy_V5 import raw_processing_cy_V5
+from raw_processing_cy_V6 import raw_processing_cy_V6
 import matplotlib.pyplot as plt
 import time
 import cProfile
 import pstats
 
-current_jit_func = raw_processing_cy_V2
-current_jit_func_name = 'raw_processing_cy_V4'
+current_jit_func = raw_processing_cy_V6
+current_jit_func_name = 'raw_processing_jit_V6'
 
 EXPOSURE_TIME = 10 # ms
 correction_info = np.load('./correction_results.npy', allow_pickle=True).item()
@@ -46,6 +48,17 @@ if current_jit_func_name == 'raw_processing_cy_V4':
                                gamma='BT709',
                                )
     srgb_img = processor.process(img)
+elif current_jit_func_name == 'raw_processing_cy_V6':
+    srgb_img = current_jit_func(img, 
+                            black_level=32, 
+                            ADC_max_level=4096,
+                            bayer_pattern='BGGR',
+                            wb_params=correction_info['wb_params'],
+                            fwd_mtx=correction_info['fwd_mtx'],
+                            render_mtx=XYZ_TO_SRGB,
+                            gamma='BT709',
+                            mode='gather'
+                            )
 else:
     srgb_img = current_jit_func(img, 
                             black_level=32, 
@@ -56,8 +69,11 @@ else:
                             render_mtx=XYZ_TO_SRGB,
                             gamma='BT709',
                             )
+
+print(f'Img value range:[{srgb_img.max(), srgb_img.min()}]')
+print(f'Img size:{srgb_img.shape}')
 # Save img using matplotlib
-plt.imsave('srgb_img.png', srgb_img)
+# plt.imsave('srgb_img.png', srgb_img)
 
 # 2. 多次运行并记录时间
 num_runs = 50
@@ -67,7 +83,20 @@ print(f"\n--- 运行 {num_runs} 次 {current_jit_func_name} 函数并记录时�
 for _ in range(num_runs):
     if current_jit_func_name == 'raw_processing_cy_V4':
         start_time = time.perf_counter()
-        srgb_img = processor.process(img)
+        processor.process(img)
+        end_time = time.perf_counter()
+    elif current_jit_func_name == 'raw_processing_cy_V6':
+        start_time = time.perf_counter()
+        current_jit_func(img, 
+                         black_level=32, 
+                         ADC_max_level=4096,
+                         bayer_pattern='BGGR',
+                         wb_params=correction_info['wb_params'],
+                         fwd_mtx=correction_info['fwd_mtx'],
+                         render_mtx=XYZ_TO_SRGB,
+                         gamma='BT709',
+                         mode='gather'
+                        )
         end_time = time.perf_counter()
     else:
         start_time = time.perf_counter()
@@ -102,6 +131,18 @@ profiler = cProfile.Profile()
 if current_jit_func_name == 'raw_processing_cy_V4':
     profiler.enable()
     srgb_img = processor.process(img)
+elif current_jit_func_name == 'raw_processing_cy_V6':
+    profiler.enable()
+    srgb_img = current_jit_func(img, 
+                            black_level=32, 
+                            ADC_max_level=4096,
+                            bayer_pattern='BGGR',
+                            wb_params=correction_info['wb_params'],
+                            fwd_mtx=correction_info['fwd_mtx'],
+                            render_mtx=XYZ_TO_SRGB,
+                            gamma='BT709',
+                            mode='gather'
+                            )
 else:
     profiler.enable()
     current_jit_func(img,
