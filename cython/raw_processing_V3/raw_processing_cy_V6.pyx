@@ -112,7 +112,6 @@ cdef void _rearrange_and_pad(
             raw_4ch[r_re, 1, c_re] = p01 # G1
             raw_4ch[r_re, 2, c_re] = p10 # G2
             raw_4ch[r_re, 3, c_re] = p11 # R
-    # print(r_re, c_re, raw_4ch[r_re, 0, c_re])
 
 cdef void _white_balance_inplace(
     np.float32_t[:, :, ::1] raw_4ch,
@@ -362,8 +361,6 @@ cdef void _run_pipeline_gather(
     cdef float inv_clip_max_level = 1.0 / clip_max_level
 
     # --- 缓冲分配 ---
-
-
     # 建立并初始化行缓冲视图
     cdef float[:, ::1] line_prev_4ch = lines_buffer_4ch[0]
     cdef float[:, ::1] line_curr_4ch = lines_buffer_4ch[1]
@@ -378,7 +375,6 @@ cdef void _run_pipeline_gather(
     for r_re in range(1, H_re - 1):
         # 加载新的一行
         line_next_4ch = raw_4ch[r_re + 1]
-        # print(r_re, line_next_4ch[0, 100])
 
         # Debayer (Gather)
         _debayer_gather_rows(
@@ -414,7 +410,7 @@ cdef inline void _debayer_scatter_row(
     这是扩散模式最核心的计算函数。
     """
     cdef int W_re = wb_4ch_row.shape[1]
-    cdef int c_re, y_base, x_base
+    cdef int c_re, y_p00, x_p00
     cdef float B, G1, G2, R
     
     # 定义物理通道索引 (p00, p01, p10, p11)
@@ -429,10 +425,16 @@ cdef inline void _debayer_scatter_row(
         G2 = wb_4ch_row[ch_p10, c_re]
         R  = wb_4ch_row[ch_p11, c_re]
 
-        # 2. 计算基准坐标(左上角p00位置)
-        y_base = 2 * (r_re - 1) + Y_PADDING // 2 # 双侧Padding
-        x_base = 2 * (c_re - 1) + X_PADDING // 2 
+        # 2. 计算基准坐标
+        y_p00 = 2 * (r_re - 1) + Y_PADDING // 2 # 双侧Padding
+        x_p00 = 2 * (c_re - 1) + X_PADDING // 2 
         # 起始时刻：base=(1, 1), 但(1, 1)的值是错误的，正确的值从(3, 3)开始到(-4, -4)
+        # y_p01 = y_p00
+        # x_p01 = x_p00 + 1
+        # y_p10 = y_p00 + 1
+        # x_p10 = x_p00
+        # y_p11 = y_p00 + 1
+        # x_p11 = x_p00 + 1
 
         # 3. 扩散贡献 (BGGR Pattern)
         # 输出通道: 0=R, 1=G, 2=B
@@ -440,51 +442,51 @@ cdef inline void _debayer_scatter_row(
         # 首先实现naive版本，后续再进行SIMD优化。
         # --- R 通道贡献 ---
         # R-site (p11)
-        final_img_padded[y_base + 1, 0, x_base + 1] += R # 自己
+        final_img_padded[y_p00 + 1, 0, x_p00 + 1] += R # 自己
         # G-sites (p01, p10)
-        final_img_padded[y_base,     0, x_base + 1] += R * 0.5 # 同block p01
-        final_img_padded[y_base + 1, 0, x_base    ] += R * 0.5 # 同block p10
-        final_img_padded[y_base + 1, 0, x_base + 2] += R * 0.5 # 右侧block p10
-        final_img_padded[y_base + 2, 0, x_base + 1] += R * 0.5 # 下方block p01
-        # B-site (p00)
-        final_img_padded[y_base,     0, x_base    ] += B * 0.25 # 同block p00
-        final_img_padded[y_base,     0, x_base + 2] += B * 0.25 # 右侧block p00
-        final_img_padded[y_base + 2, 0, x_base    ] += B * 0.25 # 下方block p00
-        final_img_padded[y_base + 2, 0, x_base + 2] += B * 0.25 # 下方右侧block p00
+        final_img_padded[y_p00,     0, x_p00 + 1] += R * 0.5 # 同block p01
+        final_img_padded[y_p00 + 1, 0, x_p00    ] += R * 0.5 # 同block p10
+        final_img_padded[y_p00 + 1, 0, x_p00 + 2] += R * 0.5 # 右侧block p10
+        final_img_padded[y_p00 + 2, 0, x_p00 + 1] += R * 0.5 # 下方block p01
+        # B-site (p00)R
+        final_img_padded[y_p00,     0, x_p00    ] += R * 0.25 # 同block p00
+        final_img_padded[y_p00,     0, x_p00 + 2] += R * 0.25 # 右侧block p00
+        final_img_padded[y_p00 + 2, 0, x_p00    ] += R * 0.25 # 下方block p00
+        final_img_padded[y_p00 + 2, 0, x_p00 + 2] += R * 0.25 # 下方右侧block p00
 
         # --- G1 通道贡献 ---
-        # G-sites (p01)
-        final_img_padded[y_base,     1, x_base + 1] += G1 # 自己
+        # G-site (p01)
+        final_img_padded[y_p00,     1, x_p00 + 1] += G1 # 自己
         # R-site (p11)
-        final_img_padded[y_base - 1, 1, x_base + 1] += R * 0.25 # 上方block p11
-        final_img_padded[y_base + 1, 1, x_base + 1] += R * 0.25 # 同block p11
+        final_img_padded[y_p00 - 1, 1, x_p00 + 1] += G1 * 0.25 # 上方block p11
+        final_img_padded[y_p00 + 1, 1, x_p00 + 1] += G1 * 0.25 # 同block p11
         # B-site (p00)
-        final_img_padded[y_base,     1, x_base    ] += B * 0.25 # 同block p00
-        final_img_padded[y_base,     1, x_base + 2] += B * 0.25 # 右侧block p00
+        final_img_padded[y_p00,     1, x_p00    ] += G1 * 0.25 # 同block p00
+        final_img_padded[y_p00,     1, x_p00 + 2] += G1 * 0.25 # 右侧block p00
 
         # --- G2 通道贡献 ---
-        # G-sites (p10)
-        final_img_padded[y_base + 1, 1, x_base    ] += G2 # 自己
+        # G-site (p10)
+        final_img_padded[y_p00 + 1, 1, x_p00    ] += G2 # 自己
         # R-site (p11)
-        final_img_padded[y_base - 1, 1, x_base + 1] += R * 0.25 # 左侧block p11
-        final_img_padded[y_base + 1, 1, x_base + 1] += R * 0.25 # 同block p11
+        final_img_padded[y_p00 + 1, 1, x_p00 - 1] += G2 * 0.25 # 左侧block p11
+        final_img_padded[y_p00 + 1, 1, x_p00 + 1] += G2 * 0.25 # 同block p11
         # B-site (p00)
-        final_img_padded[y_base,     1, x_base    ] += B * 0.25 # 同block p00
-        final_img_padded[y_base + 2, 1, x_base    ] += B * 0.25 # 下方block p00
+        final_img_padded[y_p00,     1, x_p00    ] += G2 * 0.25 # 同block p00
+        final_img_padded[y_p00 + 2, 1, x_p00    ] += G2 * 0.25 # 下方block p00
 
         # --- B 通道贡献 ---
         # B-site (p00)
-        final_img_padded[y_base,     2, x_base    ] += B # 自己
+        final_img_padded[y_p00,     2, x_p00    ] += B # 自己
         # G-sites (p01, p10)
-        final_img_padded[y_base,     2, x_base - 1] += G1 * 0.5 # 左侧block p01
-        final_img_padded[y_base,     2, x_base + 1] += G1 * 0.5 # 同block p01
-        final_img_padded[y_base - 1, 2, x_base    ] += G2 * 0.5 # 上方block p10
-        final_img_padded[y_base + 1, 2, x_base    ] += G2 * 0.5 # 同block p10
+        final_img_padded[y_p00,     2, x_p00 - 1] += B * 0.5 # 左侧block p01
+        final_img_padded[y_p00,     2, x_p00 + 1] += B * 0.5 # 同block p01
+        final_img_padded[y_p00 - 1, 2, x_p00    ] += B * 0.5 # 上方block p10
+        final_img_padded[y_p00 + 1, 2, x_p00    ] += B * 0.5 # 同block p10
         # R-site (p11)
-        final_img_padded[y_base - 1, 2, x_base - 1] += R * 0.25 # 左侧block p11
-        final_img_padded[y_base - 1, 2, x_base + 1] += R * 0.25 # 上方block p11
-        final_img_padded[y_base + 1, 2, x_base - 1] += R * 0.25 # 左侧下方block p11
-        final_img_padded[y_base + 1, 2, x_base + 1] += R * 0.25 # 同block p11
+        final_img_padded[y_p00 - 1, 2, x_p00 - 1] += B * 0.25 # 左侧block p11
+        final_img_padded[y_p00 - 1, 2, x_p00 + 1] += B * 0.25 # 上方block p11
+        final_img_padded[y_p00 + 1, 2, x_p00 - 1] += B * 0.25 # 左侧下方block p11
+        final_img_padded[y_p00 + 1, 2, x_p00 + 1] += B * 0.25 # 同block p11
 
 cdef inline void _process_CCM_gamma_scatter_rows(
     float [:, :, ::1] final_img_padded,
@@ -568,9 +570,8 @@ cdef void _run_pipeline_scatter(
             r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC, clip_max_level, pattern_is_bggr)
 
         # 阶段 B: 扩散Debayer
-        _debayer_scatter_row(line_buf_4ch_wb, r_re, final_img_padded, Y_PADDING, X_PADDING)
+        _debayer_scatter_row(raw_4ch[r_re], r_re, final_img_padded, Y_PADDING, X_PADDING)
 
-        # print('working on:', r_re)
         # 阶段 C: 弹出并后处理 (Pop & Process)
         # 根据数据依赖，在处理完 r_re 后，起始于 2*r_re-3 的两行数据已就绪。
         y_to_calculate = (2 * r_re - 3) + Y_PADDING // 2
@@ -578,7 +579,6 @@ cdef void _run_pipeline_scatter(
             final_img_padded, y_to_calculate, W_padded,
             ccm, gamma_lut, inv_clip_max_level
         )
-        # print(r_re, H_re, y_to_calculate)
 
 
 
@@ -672,7 +672,6 @@ cdef void cy_full_pipeline_v6_gather(
 
     # 步骤 1: 全局重排与Padding
     _rearrange_and_pad(img, raw_4ch, black_level)
-    # print(raw_4ch[1000, 0, 1000])
 
     # 步骤 2: 原地白平衡
     if pattern_is_bggr:
@@ -747,6 +746,7 @@ def raw_processing_cy_V6(img: np.ndarray,
         return np.ascontiguousarray(final_img_gather.transpose(0, 2, 1)) 
 
     elif mode == 'scatter':
+        # print('scatter mode')
         cy_full_pipeline_v6_scatter(c_img, final_img_padded_scatter, 
                                     black_level,
                                     r_gain, g_gain, b_gain, r_dBLC, g_dBLC, b_dBLC,
