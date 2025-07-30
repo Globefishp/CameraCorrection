@@ -15,7 +15,7 @@
 # rgb line buffer after line debayer
 # Modified from V3.
 # SIMD friendly CCM.
-# 28.369 ± 0.850 ms
+# 25.788 ± 0.618 ms
 
 
 import cython
@@ -268,33 +268,28 @@ cdef void cy_full_pipeline(
         #     g_line_buffer[c_orig_inner] *= inv_clip_max_level
         #     b_line_buffer[c_orig_inner] *= inv_clip_max_level
         for c_orig_inner in range(W_orig):
-            r_ccm_line[c_orig_inner] = (r_line_buffer[c_orig_inner] * inv_clip_max_level) * m00 + \
-                                       (g_line_buffer[c_orig_inner] * inv_clip_max_level) * m01 + \
-                                       (b_line_buffer[c_orig_inner] * inv_clip_max_level) * m02
+            r_ccm_line[c_orig_inner] = max(0, min(1, (r_line_buffer[c_orig_inner] * inv_clip_max_level) * m00 + \
+                                                     (g_line_buffer[c_orig_inner] * inv_clip_max_level) * m01 + \
+                                                     (b_line_buffer[c_orig_inner] * inv_clip_max_level) * m02)) * \
+                                                      lut_max_index + 0.5
         for c_orig_inner in range(W_orig):
-            g_ccm_line[c_orig_inner] = (r_line_buffer[c_orig_inner] * inv_clip_max_level) * m10 + \
-                                       (g_line_buffer[c_orig_inner] * inv_clip_max_level) * m11 + \
-                                       (b_line_buffer[c_orig_inner] * inv_clip_max_level) * m12
+            g_ccm_line[c_orig_inner] = max(0, min(1, (r_line_buffer[c_orig_inner] * inv_clip_max_level) * m10 + \
+                                                     (g_line_buffer[c_orig_inner] * inv_clip_max_level) * m11 + \
+                                                     (b_line_buffer[c_orig_inner] * inv_clip_max_level) * m12)) * \
+                                                     lut_max_index + 0.5
         for c_orig_inner in range(W_orig):
-            b_ccm_line[c_orig_inner] = (r_line_buffer[c_orig_inner] * inv_clip_max_level) * m20 + \
-                                       (g_line_buffer[c_orig_inner] * inv_clip_max_level) * m21 + \
-                                       (b_line_buffer[c_orig_inner] * inv_clip_max_level) * m22
+            b_ccm_line[c_orig_inner] = max(0, min(1, (r_line_buffer[c_orig_inner] * inv_clip_max_level) * m20 + \
+                                                     (g_line_buffer[c_orig_inner] * inv_clip_max_level) * m21 + \
+                                                     (b_line_buffer[c_orig_inner] * inv_clip_max_level) * m22)) * \
+                                                     lut_max_index + 0.5
 
         # Clipping, Gamma correction, and final storage
         # This part is typically scalar due to the table lookup (gather operation).
         # Memory-bound: should be done in one loop ensuring coalesced memory access.
         for c_orig_inner in range(W_orig):
-            r_ccm = clip_0_1(r_ccm_line[c_orig_inner])
-            g_ccm = clip_0_1(g_ccm_line[c_orig_inner])
-            b_ccm = clip_0_1(b_ccm_line[c_orig_inner])
-
-            r_idx = <int>(r_ccm * lut_max_index + 0.5)
-            g_idx = <int>(g_ccm * lut_max_index + 0.5)
-            b_idx = <int>(b_ccm * lut_max_index + 0.5)
-
-            final_img[r_padded-1, c_orig_inner, 0] = gamma_lut[r_idx]
-            final_img[r_padded-1, c_orig_inner, 1] = gamma_lut[g_idx]
-            final_img[r_padded-1, c_orig_inner, 2] = gamma_lut[b_idx]
+            final_img[r_padded-1, c_orig_inner, 0] = gamma_lut[<int>r_ccm_line[c_orig_inner]]
+            final_img[r_padded-1, c_orig_inner, 1] = gamma_lut[<int>g_ccm_line[c_orig_inner]]
+            final_img[r_padded-1, c_orig_inner, 2] = gamma_lut[<int>b_ccm_line[c_orig_inner]]
 
     # end_total = clock()
     # timings[3] = <double>(end_total - start_total) / CLOCKS_PER_SEC # Total time

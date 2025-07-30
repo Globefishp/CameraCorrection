@@ -66,13 +66,14 @@ if sys.platform == 'win32':
     # Flags for MSVC / clang-cl. /arch:AVX2 is key for vectorization.
     extra_compile_args = ['/Ox',
                           '/fp:fast',
-                          '/openmp',
+                        #   '/openmp',
                           '/arch:AVX2',
+                          '/Qvec-report:1',
                         #   '/Zi',
                           ]
 else:
     # Flags for GCC / Clang. -mavx2 is more explicit.
-    extra_compile_args = ['-O3', '-ffast-math', '-march=native', '-fopenmp', '-mavx2']
+    extra_compile_args = ['-O3', '-ffast-math', '-march=native', '-fopenmp', '-mavx2', '-fopt-info-vec-all',]
 
 extra_link_args = [
                 #    '/DEBUG',
@@ -91,7 +92,9 @@ ext_modules = [
 ]
 
 setup(
-    ext_modules=cythonize(ext_modules, compiler_directives={'language_level': "3"})
+    ext_modules=cythonize(ext_modules,
+                          annotate=True, 
+                          compiler_directives={'language_level': "3"})
 )
 
 # Copy to parent directory

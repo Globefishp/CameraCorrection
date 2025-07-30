@@ -8,14 +8,14 @@ import shutil
 
 # --- Argument parsing ---
 # Use a fixed module name for this specific setup script
-module_name = 'raw_processing_cy_V8'
+module_name = 'raw_processing_cy_V9'
 pyx_source_file = f"{module_name}.pyx"
 c_source_file = "raw_processing_core.c"
 
 # --- Build configuration ---
 if sys.platform == 'win32':
     # Flags for MSVC / clang-cl. /arch:AVX2 is key for vectorization.
-    extra_compile_args = ['/O2', '/fp:fast', '/arch:AVX2', '/Qvec-report:1', '/FAs']
+    extra_compile_args = ['/Ox', '/fp:fast', '/arch:AVX2', '/Qvec-report:1', '/FAs']
     extra_link_args = []
 else:
     # Flags for GCC / Clang.
