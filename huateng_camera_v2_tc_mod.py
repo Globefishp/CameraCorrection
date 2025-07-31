@@ -119,6 +119,7 @@ def extract_tc_from_frames(
         print(f"Error during timecode extraction in extract_tc_from_frames: {e}")
         return original_images, None
 
+# TODO: Cython Implementation.
 def decode_12bit_packed_to_16bit_numpy(packed_data: np.ndarray) -> np.ndarray:
     """
     Decode 12-bit packed data to 16-bit numpy array.
