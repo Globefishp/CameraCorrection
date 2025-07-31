@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 import ctypes # For memmove
 from typing import Tuple
 
-import mvsdk
+from . import mvsdk
 
 FRAME_TIME = 10
 GAIN = 1.0
@@ -207,32 +207,40 @@ class Camera(object):
         self.actual_gain = None
 
         # 图像维度和缓冲区大小
-        self.image_width = 0
-        self.image_height = 0
-        self.image_channels = 0
+        self.image_width = None
+        self.image_height = None
+        self.image_channels = None
         self.bit_depth = hibitdepth  # 在SDK中被称为media_type，详见open时枚举。
         self.pixel_bytes = 1 if hibitdepth==0 else 2  # 每pixel占用pixel_bytes内存。
         self.actual_image_buffer_size = 0 # Size in bytes for HxWxC image data
         
         self.appended_rows = APPENDED_ROWS_FOR_TIMECODE
-        self.new_frame_height = 0 # image_height + appended_rows
+        self.new_frame_height = None # image_height + appended_rows
         self.total_allocated_buffer_size = 0 # 包含追加时间码的大小 (H+appended_rows)xWxC
         self._timecode_enabled = tc
 
     @property
     def width(self) -> int:
+        if self.image_width is None:
+            raise ValueError("Camera width property is not initialized yet. Call open() first.")
         return self.image_width
 
     @property
     def height(self) -> int:
+        if self.image_height is None:
+            raise ValueError("Camera height property is not initialized yet. Call open() first.")
         return self.image_height
     
     @property
     def channels(self) -> int:
+        if self.image_channels is None:
+            raise ValueError("Camera channels property is not initialized yet. Call open() first.")
         return self.image_channels
 
     @property
     def output_frame_height(self) -> int: # 包含附加行在内的缓冲区高度
+        if self.new_frame_height is None:
+            raise ValueError("Camera output_frame_height property is not initialized yet. Call open() first.")
         return self.new_frame_height
 
     @property
