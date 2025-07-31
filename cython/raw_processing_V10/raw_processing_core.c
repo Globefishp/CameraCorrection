@@ -234,7 +234,10 @@ void c_full_pipeline(
         // Can be unrolled by compiler to ultilize all register.
         // Bottleneck: write back to memory (or SoA->AoS). Gamma time only 1.4ms @ 65536 size.
         // Can be check by set index to 0 to eliminate random access.
-        // TODO: Gamma Lut in separate loop, SoA->AoS in another separate loop to enable auto optimization.
+        // If separate into LUT loop and write loop: LUT loop: 3.6ms, write loop still ~8ms.
+        // Thus we can see the cost of accessing the buffer line: in AVX2 access (Prepare buffer: 0.7ms); in scaler access: 2.2ms.
+        // The stubborn 8ms is likely cause by write back. Not SoA->AoS (AVX2 intrinsic by Intel gives the same speed.) 
+        // See AVX2 version timing.
         for (int c = 0; c < W_orig; ++c) {
             out_row[c * 3 + 0] = gamma_lut[r_ccm_line[c]];
             out_row[c * 3 + 1] = gamma_lut[g_ccm_line[c]];
