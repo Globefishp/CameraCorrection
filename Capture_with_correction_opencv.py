@@ -113,16 +113,16 @@ class RawOpenCVProcessor:
         timings['demosaicing'] = time.perf_counter() - start_time
 
         # 6. 颜色矩阵转换 (CCM)
-        start_time = time.perf_counter()
         # 将图像转换为float32并归一化到[0, 1]以便进行矩阵乘法
         img_rgb_linear_float = img_rgb_linear.astype(np.float32) / 65535.0
 
+        start_time = time.perf_counter()
         # 应用颜色矩阵 (使用cv2.transform)
         img_rgb_ccm = cv2.transform(img_rgb_linear_float, self.final_ccm)
 
         # 裁剪到[0, 1]
-        cv2.threshold(img_rgb_ccm, 0, 0, cv2.THRESH_TOZERO, dst=img_rgb_ccm) # 裁剪下限
-        cv2.min(img_rgb_ccm, 1.0, dst=img_rgb_ccm) # 裁剪上限
+        cv2.threshold(img_rgb_ccm, 0, 0, cv2.THRESH_TOZERO, dst=img_rgb_ccm)
+        cv2.threshold(img_rgb_ccm, 1, 1, cv2.THRESH_TRUNC, dst=img_rgb_ccm)
         timings['color_matrix_conversion'] = time.perf_counter() - start_time
 
         # 7. Gamma映射 (BT.709)
@@ -138,7 +138,8 @@ class RawOpenCVProcessor:
 
         # 裁剪到[0, 1] (在LUT转换后可能不需要，但为了安全保留)
         cv2.threshold(srgb_img, 0, 0, cv2.THRESH_TOZERO, dst=srgb_img)
-        cv2.min(srgb_img, 1.0, dst=srgb_img)
+        cv2.threshold(srgb_img, 1, 1, cv2.THRESH_TRUNC, dst=srgb_img)
+        # cv2.min(srgb_img, 1.0, dst=srgb_img)
         timings['gamma_mapping'] = time.perf_counter() - start_time
 
         timings['total_processing_time'] = time.perf_counter() - start_total

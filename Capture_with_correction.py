@@ -20,6 +20,8 @@ from raw_processing_cy_V6_2 import raw_processing_cy_V6_2
 from raw_processing_cy_V7 import RawV7Processor
 from raw_processing_cy_V8 import RawV8Processor
 from raw_processing_cy_V9 import RawV9Processor
+from raw_processing_cy_V10 import RawV10Processor
+from raw_processing_cy_V11 import RawV11Processor
 
 import matplotlib.pyplot as plt
 import time
@@ -27,8 +29,15 @@ import cProfile
 import pstats
 
 current_jit_func = raw_processing_cy_V5 # before cy_V7, except for cy_V4
-cy_processor = RawV8Processor # after cy_V7
-current_jit_func_name = 'raw_processing_cy_V8'
+cy_processor = RawV11Processor # after cy_V7
+current_jit_func_name = 'raw_processing_cy_V11'
+
+raw_processor_list =  ['raw_processing_cy_V7', 
+                       'raw_processing_cy_V8', 
+                       'raw_processing_cy_V9', 
+                       'raw_processing_cy_V10',
+                       'raw_processing_cy_V11',
+                       ]
 
 
 cy_V6_mode = 'scatter'
@@ -69,7 +78,7 @@ elif current_jit_func_name == 'raw_processing_cy_V6':
                             gamma='BT709',
                             mode=cy_V6_mode
                             )
-elif current_jit_func_name in ['raw_processing_cy_V7', 'raw_processing_cy_V8', 'raw_processing_cy_V9']:
+elif current_jit_func_name in raw_processor_list:
     processor = cy_processor(2048, 2448, black_level=32,
                                ADC_max_level=4096,
                                bayer_pattern='BGGR',
@@ -93,10 +102,13 @@ else:
 print(f'Img value range:[{srgb_img.max(), srgb_img.min()}]')
 print(f'Img size:{srgb_img.shape}')
 # Save img using matplotlib
-# plt.imsave('srgb_img.png', srgb_img)
+if current_jit_func_name == 'raw_processing_cy_V11':
+    # uint16->uint8
+    srgb_img = (srgb_img >> 8).astype(np.uint8)
+plt.imsave('srgb_img.png', srgb_img)
 
 # 2. 多次运行并记录时间
-num_runs = 100
+num_runs = 1000
 run_times = []
 timings_total = np.zeros(4)
 print(f"\n--- 运行 {num_runs} 次 {current_jit_func_name} 函数并记录时间 ---")
@@ -105,7 +117,7 @@ for _ in range(num_runs):
         start_time = time.perf_counter()
         processor.process(img)
         end_time = time.perf_counter()
-    elif current_jit_func_name in ['raw_processing_cy_V7', 'raw_processing_cy_V8', 'raw_processing_cy_V9']:
+    elif current_jit_func_name in raw_processor_list:
         start_time = time.perf_counter()
         processor.process(img)
         end_time = time.perf_counter()
@@ -155,7 +167,7 @@ profiler = cProfile.Profile()
 if current_jit_func_name == 'raw_processing_cy_V4':
     profiler.enable()
     processor.process(img)
-elif current_jit_func_name in ['raw_processing_cy_V7', 'raw_processing_cy_V8', 'raw_processing_cy_V9']:
+elif current_jit_func_name in raw_processor_list:
     profiler.enable()
     processor.process(img)
 elif current_jit_func_name == 'raw_processing_cy_V6':

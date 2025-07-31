@@ -3,7 +3,7 @@
 #include <stddef.h> // For size_t
 #include <immintrin.h> // For AVX, AVX2
 
-// 17.354 ± 0.400 ms
+// 22.753 ± 0.429 ms
 
 // Forward declaration of helper functions
 static inline void white_balance_line_vectorized(
