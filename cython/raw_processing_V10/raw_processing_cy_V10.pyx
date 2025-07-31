@@ -11,9 +11,23 @@ cimport numpy as np
 from typing import Tuple
 
 # --- C-level imports from our own C code ---
+cdef extern from "windows.h":
+    ctypedef struct LARGE_INTEGER:
+        long long QuadPart
+    
+    int QueryPerformanceFrequency(LARGE_INTEGER* lpFrequency)
+    int QueryPerformanceCounter(LARGE_INTEGER* lpPerformanceCount)
+    
 cdef extern from "raw_processing_core.h":
     # Define a C-level boolean type for Cython to use
     ctypedef int bool
+
+    ctypedef enum TimingSections:
+        TIMING_PREPARE_BUFFER
+        TIMING_DEBAYER
+        TIMING_CCM_WB
+        TIMING_GAMMA_WRITEMEM
+        TIMING_COUNT
     
     void c_full_pipeline(
         const np.uint16_t* img,
@@ -30,7 +44,8 @@ cdef extern from "raw_processing_core.h":
         float* final_img,
         float* line_buffers,
         float* rgb_line_buffer,
-        float* ccm_line_buffer
+        int* ccm_line_buffer,
+        long long* timing_results
     )
 
 # This function remains in Cython as it's a convenient way to create a NumPy array
@@ -88,14 +103,14 @@ cdef class RawV10Processor:
         self.conversion_mtx = np.dot(c_render_mtx, c_fwd_mtx)
 
         if gamma == 'BT709':
-            self.gamma_lut = c_create_bt709_lut()
+            self.gamma_lut = c_create_bt709_lut(size=256)
         else:
             raise NotImplementedError(f"Gamma '{gamma}' is not supported.")
             
         cdef int W_padded = self.W_orig + 2
         self.line_buffers = np.empty((3, W_padded), dtype=np.float32)
         self.rgb_line_buffer = np.empty((3, self.W_orig), dtype=np.float32)
-        self.ccm_line_buffer = np.empty((3, self.W_orig), dtype=np.float32)
+        self.ccm_line_buffer = np.empty((3, self.W_orig), dtype=np.int32)
 
     def process(self, np.ndarray img):
         """
@@ -112,7 +127,16 @@ cdef class RawV10Processor:
         cdef np.ndarray[np.float32_t, ndim=1, mode='c'] c_gamma_lut = self.gamma_lut
         cdef np.ndarray[np.float32_t, ndim=2, mode='c'] c_line_buffers = self.line_buffers
         cdef np.ndarray[np.float32_t, ndim=2, mode='c'] c_rgb_line_buffer = self.rgb_line_buffer
-        cdef np.ndarray[np.float32_t, ndim=2, mode='c'] c_ccm_line_buffer = self.ccm_line_buffer
+        cdef np.ndarray[int, ndim=2, mode='c'] c_ccm_line_buffer = self.ccm_line_buffer
+
+        # Variables for timing
+        cdef long long[<int>TIMING_COUNT] timing_results
+        cdef LARGE_INTEGER freq
+        QueryPerformanceFrequency(&freq)
+        cdef double frequency = <double>freq.QuadPart
+
+        cdef LARGE_INTEGER start_total, end_total
+        QueryPerformanceCounter(&start_total)
 
         # Call the core C pipeline with pointers to the NumPy array data
         c_full_pipeline(
@@ -129,8 +153,23 @@ cdef class RawV10Processor:
             &final_float[0, 0, 0],
             &c_line_buffers[0, 0],
             &c_rgb_line_buffer[0, 0],
-            &c_ccm_line_buffer[0, 0]
+            &c_ccm_line_buffer[0, 0],
+            timing_results
         )
+        
+        QueryPerformanceCounter(&end_total)
+        
+        cdef double prepare_buffer_ms = (timing_results[<int>TIMING_PREPARE_BUFFER] * 1000.0) / frequency
+        cdef double debayer_ms = (timing_results[<int>TIMING_DEBAYER] * 1000.0) / frequency
+        cdef double ccm_wb_ms = (timing_results[<int>TIMING_CCM_WB] * 1000.0) / frequency
+        cdef double gamma_write_mem_ms = (timing_results[<int>TIMING_GAMMA_WRITEMEM] * 1000.0) / frequency
+        cdef double total_c_pipeline_ms = ((<double>end_total.QuadPart - start_total.QuadPart) * 1000.0) / frequency
+        
+        print(f"Prepare Buffer time: {prepare_buffer_ms:.3f} ms")
+        print(f"Debayer time: {debayer_ms:.3f} ms")
+        print(f"CCM & WB time: {ccm_wb_ms:.3f} ms")
+        print(f"Gamma + Wirte Mem time: {gamma_write_mem_ms:.3f} ms")
+        print(f"Total C Pipeline time: {total_c_pipeline_ms:.3f} ms")
 
         return final_float
 

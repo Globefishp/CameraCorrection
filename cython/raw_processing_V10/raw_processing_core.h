@@ -3,6 +3,15 @@
 
 #include <stdint.h> // For uint16_t
 
+// Enum to define indices for the timing results array
+typedef enum {
+    TIMING_PREPARE_BUFFER = 0,
+    TIMING_DEBAYER = 1,
+    TIMING_CCM_WB = 2,
+    TIMING_GAMMA_WRITEMEM = 3,
+    TIMING_COUNT // Represents the total number of timed sections
+} TimingSections;
+
 // Define a boolean type for C, if not using C99's <stdbool.h>
 // This makes the code compatible with older C standards.
 #ifndef __cplusplus
@@ -56,7 +65,8 @@ void c_full_pipeline(
     float* restrict final_img,
     float* restrict line_buffers,
     float* restrict rgb_line_buffer,
-    float* restrict ccm_line_buffer
+    int* restrict ccm_line_buffer,
+    long long* restrict timing_results // Array of size TIMING_COUNT
 );
 
 #endif // RAW_PROCESSING_CORE_H
