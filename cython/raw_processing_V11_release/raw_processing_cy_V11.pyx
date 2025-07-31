@@ -6,7 +6,8 @@
 # cython: nonecheck=False
 
 # Reduce output to uint16 accelerate the write back stage.
-# 12.868 ± 0.253 ms
+# 12.868 ± 0.253 ms @ LUT size=65536
+# 12.361 ± 0.345 ms @ LUT size=1024
 
 import cython
 import numpy as np
@@ -36,7 +37,7 @@ cdef extern from "raw_processing_core.h":
         int* ccm_line_buffer,
     )
 
-def c_create_bt709_lut(int size=65536):
+cdef c_create_bt709_lut(int size=65536):
     """
     Creates a lookup table (LUT) for BT.709 Gamma correction, outputting uint16 values.
     This is a Python-facing function that returns a NumPy array.
@@ -46,21 +47,21 @@ def c_create_bt709_lut(int size=65536):
     cdef float linear_input_f
     cdef float nonlinear_output_f
     cdef float max_val = <float>(size - 1)
-    
-    for i in range(size):
-        linear_input_f = <float>i / max_val
-        if linear_input_f < 0.018:
-            nonlinear_output_f = <float>4.5 * linear_input_f
-        else:
-            nonlinear_output_f = <float>1.099 * pow(linear_input_f, 0.45) - <float>0.099
-        
-        # Clamp and scale to uint16 range
-        if nonlinear_output_f < 0.0:
-            nonlinear_output_f = 0.0
-        elif nonlinear_output_f > 1.0:
-            nonlinear_output_f = 1.0
+    with nogil:
+        for i in range(size):
+            linear_input_f = <float>i / max_val
+            if linear_input_f < 0.018:
+                nonlinear_output_f = <float>4.5 * linear_input_f
+            else:
+                nonlinear_output_f = <float>1.099 * (linear_input_f ** 0.45) - <float>0.099
             
-        lut[i] = <np.uint16_t>(nonlinear_output_f * 65535.0 + 0.5)
+            # Clamp and scale to uint16 range
+            if nonlinear_output_f < 0.0:
+                nonlinear_output_f = 0.0
+            elif nonlinear_output_f > 1.0:
+                nonlinear_output_f = 1.0
+                
+            lut[i] = <np.uint16_t>(nonlinear_output_f * 65535.0 + 0.5)
     return lut
 
 
@@ -82,7 +83,7 @@ cdef class RawV11Processor:
 
     def __cinit__(self, int H_orig, int W_orig, int black_level, int ADC_max_level, str bayer_pattern,
                   tuple wb_params, np.ndarray fwd_mtx, np.ndarray render_mtx,
-                  str gamma='BT709'):
+                  str gamma='BT709', int gamma_lut_size=1024):
         """
         Initializes the processor with all constant parameters and pre-allocates buffers.
         """
@@ -99,7 +100,7 @@ cdef class RawV11Processor:
         self.conversion_mtx = np.dot(c_render_mtx, c_fwd_mtx)
 
         if gamma == 'BT709':
-            self.gamma_lut = c_create_bt709_lut(size=65536)
+            self.gamma_lut = c_create_bt709_lut(size=gamma_lut_size)
         else:
             raise NotImplementedError(f"Gamma '{gamma}' is not supported.")
             
