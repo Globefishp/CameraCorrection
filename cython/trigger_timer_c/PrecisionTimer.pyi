@@ -31,13 +31,13 @@ class PrecisionTimer:
         ----------
         interval_s : float
             The desired time interval between triggers, in seconds.
-        hCamera : int
-            The integer handle to the camera, which will be passed to the
-            trigger function.
         c_trigger_func : ctypes function object or similar
             The C-level trigger function to call. This should be a function
             pointer from a loaded library, e.g., `mvsdk._sdk.CameraSoftTrigger`.
             The expected signature is `void(int)`.
+        hCamera : int
+            The integer handle to the camera, which will be passed to the
+            trigger function.
         busy_wait_us : int, optional
             The duration in microseconds (µs) for the final busy-wait loop.
             This determines the trade-off between CPU usage and timing precision.
