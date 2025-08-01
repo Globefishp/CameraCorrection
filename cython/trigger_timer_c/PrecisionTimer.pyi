@@ -19,8 +19,8 @@ class PrecisionTimer:
     def __init__(
         self,
         interval_s: float,
-        hCamera: int,
         c_trigger_func: Callable[[int], None] | Any,
+        hCamera: int,
         busy_wait_us: int = 2000,
         priority: int = 0
     ) -> None:
