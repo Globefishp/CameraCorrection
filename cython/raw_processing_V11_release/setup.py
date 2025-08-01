@@ -40,8 +40,11 @@ setup(
     ext_modules=cythonize(
         ext_modules,
         # annotate=True,
-        compiler_directives={'language_level': "3"}
-    )
+        compiler_directives={'language_level': "3"},
+    ),
+    package_data={
+    "raw_processing_cy_V11": ["*.pyi"],
+    }
 )
 
 # --- Post-build step: Copy the compiled module to the project root ---
