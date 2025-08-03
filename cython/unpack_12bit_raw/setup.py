@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 # MSVC compiler flags
-extra_compile_args = ['/O2', '/arch:AVX2', '/FAs']
+extra_compile_args = ['/O2', '/arch:AVX2', '/FAs', '/Qvec-report:2']
 
 # Define the extension module
 ext_modules = [

@@ -3,9 +3,13 @@
 
 // Using CPU capabilities: SSE(_mm_shuffle_ps), SSE2(_mm_loadu/storeu_si128, _mm_srli_epi16, _mm_andnot/and/or_si128), SSSE3(_mm_shuffle_epi8), 
 
-// Memory bound: 2.569 ± 0.985 ms, n=1000. 
+// SIMD implementation (memory bound): 2.569 ± 0.985 ms, n=1000. 
 // Read: 2448*2048*1.5Bpp=7.52 MB, Write: 2448*2048*2Bpp=10.02 MB. 
 // Total throughput: 6.8GB/s
+
+// Naive C implementation:
+//   4.027 ± 1.398 ms, n=1000.
+
 
 // Forward declaration for the main function
 void unpack_12bit_raw(uint8_t *src, uint16_t *dst, int width);
@@ -126,4 +130,14 @@ void unpack_12bit_raw(uint8_t *src, uint16_t *dst, int width)
             dst[i * 2 + 1] = (uint16_t)(byte2 << 4) | (uint16_t)(byte1 >> 4);
         }
     }
+
+    // // Naive C implementation for compiler auto-vectorization test
+    // for (int i = 0; i < width / 2; ++i) {
+    //     uint8_t byte0 = src[i * 3];
+    //     uint8_t byte1 = src[i * 3 + 1];
+    //     uint8_t byte2 = src[i * 3 + 2];
+
+    //     dst[i * 2] = (uint16_t)(byte0 << 4) | (uint16_t)(byte1 & 0x0F);
+    //     dst[i * 2 + 1] = (uint16_t)(byte2 << 4) | (uint16_t)(byte1 >> 4);
+    // }
 }
