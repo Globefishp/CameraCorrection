@@ -3,11 +3,11 @@
 
 // Using CPU capabilities: SSE(_mm_shuffle_ps), SSE2(_mm_loadu/storeu_si128, _mm_srli_epi16, _mm_andnot/and/or_si128), SSSE3(_mm_shuffle_epi8), 
 
-// Trying 2x software pipeline.
-// 1.169 ± 0.091 ms, n=1000, with aligned output array, 2448*2048, i9-14900K@5.4 GHz
-// Total throughput: 15.0 GB/s, 2.78 GB/GHz (bytes per cycle.)
+// Trying 3x software pipeline.
+// With 3-stage pipeline, we aim to hide the latency of load, compute, and store operations.
+// Nearly the same performance with V2.
 
-#include "core_intrinsic_V2.h"
+#include "core_intrinsic_V3.h"
 
 static inline void unpack_12bit_raw_xmm_inline(
      const __m128i input0, // group0
@@ -92,7 +92,7 @@ static inline void unpack_12bit_raw_xmm_inline(
 
 /**
  * @brief Unpacks a 12-bit RAW image buffer to a 16-bit buffer using SIMD instructions
- *        with a 2-stage software pipeline and streaming stores.
+ *        with a 3-stage software pipeline and streaming stores.
  * 
  * This function processes the image data in chunks of 32 pixels (48 bytes) for optimal
  * performance. The main loop is software-pipelined to overlap memory I/O with computation,
@@ -109,59 +109,92 @@ void unpack_12bit_raw(uint8_t *src, uint16_t *dst, int width)
 {
     int i = 0;
     // Process 32 pixels (48 bytes) per loop.
-    int main_loop_limit = width - (width % 32);
+    int num_chunks = width / 32;
+    int main_loop_chunks = num_chunks >= 2 ? num_chunks - 2 : 0;
 
-    // // Prefetch distance, tuned for modern CPUs. 6-8 iterations ahead is a good starting point.
-    // const int prefetch_distance = 8 * 48;
-
-    if (main_loop_limit >= 32) {
+    if (num_chunks >= 2) {
         // --- Pipeline Prologue ---
-        // Load data for the first chunk (chunk 0) into current registers.
-        __m128i input0_curr = _mm_loadu_si128((const __m128i*)(src));
-        __m128i input1_curr = _mm_loadu_si128((const __m128i*)(src + 16));
-        __m128i input2_curr = _mm_loadu_si128((const __m128i*)(src + 32));
+        // Load chunk 0
+        __m128i in0_s1 = _mm_loadu_si128((const __m128i*)(src));
+        __m128i in1_s1 = _mm_loadu_si128((const __m128i*)(src + 16));
+        __m128i in2_s1 = _mm_loadu_si128((const __m128i*)(src + 32));
         src += 48;
 
+        // Load chunk 1 and process chunk 0
+        __m128i in0_s2 = _mm_loadu_si128((const __m128i*)(src));
+        __m128i in1_s2 = _mm_loadu_si128((const __m128i*)(src + 16));
+        __m128i in2_s2 = _mm_loadu_si128((const __m128i*)(src + 32));
+        src += 48;
+        
+        __m128i out0_s1, out1_s1, out2_s1, out3_s1;
+        unpack_12bit_raw_xmm_inline(in0_s1, in1_s1, in2_s1, &out0_s1, &out1_s1, &out2_s1, &out3_s1);
+
         // --- Pipelined Main Loop ---
-        // The loop starts from the second chunk (i=32) and goes up to the second-to-last chunk.
-        // In each iteration, we load the next chunk while processing the current one.
-        for (i = 32; i < main_loop_limit; i += 32) {
-            // // Prefetch data for a future iteration to hide memory latency.
-            // _mm_prefetch((const char*)(src) + prefetch_distance, _MM_HINT_T0);
+        // In each iteration: Load (N), Process (N-1), Store (N-2)
+        for (i = 0; i < main_loop_chunks; ++i) {
+            // Store results of chunk (i)
+            _mm_stream_si128((__m128i*)(dst), out0_s1);
+            _mm_stream_si128((__m128i*)(dst + 8), out1_s1);
+            _mm_stream_si128((__m128i*)(dst + 16), out2_s1);
+            _mm_stream_si128((__m128i*)(dst + 24), out3_s1);
+            dst += 32;
             
-            // Stage 2: Load data for the next chunk into next registers.
-            __m128i input0_next = _mm_loadu_si128((const __m128i*)(src));
-            __m128i input1_next = _mm_loadu_si128((const __m128i*)(src + 16));
-            __m128i input2_next = _mm_loadu_si128((const __m128i*)(src + 32));
+            // Load data for chunk (i + 2)
+            // If load before store, the num of registers needed is over 16...
+            // If load after store, only use xmm13, same with V2
+            __m128i in0_s3 = _mm_loadu_si128((const __m128i*)(src));
+            __m128i in1_s3 = _mm_loadu_si128((const __m128i*)(src + 16));
+            __m128i in2_s3 = _mm_loadu_si128((const __m128i*)(src + 32));
             src += 48;
 
-            // Stage 1: Process the current chunk (loaded in the previous iteration).
-            __m128i out0, out1, out2, out3;
-            unpack_12bit_raw_xmm_inline(input0_curr, input1_curr, input2_curr, &out0, &out1, &out2, &out3);
+            // Process chunk (i + 1)
+            __m128i out0_s2, out1_s2, out2_s2, out3_s2;
+            unpack_12bit_raw_xmm_inline(in0_s2, in1_s2, in2_s2, &out0_s2, &out1_s2, &out2_s2, &out3_s2);
+            
+            // Move pipeline stages forward
+            out0_s1 = out0_s2;
+            out1_s1 = out1_s2;
+            out2_s1 = out2_s2;
+            out3_s1 = out3_s2;
 
-            // Stage 1: Store the results of the processed chunk using streaming stores.
-            _mm_stream_si128((__m128i*)(dst), out0);
-            _mm_stream_si128((__m128i*)(dst + 8), out1);
-            _mm_stream_si128((__m128i*)(dst + 16), out2);
-            _mm_stream_si128((__m128i*)(dst + 24), out3);
-            dst += 32;
-
-            // Prepare for the next iteration: the 'next' data becomes the 'current' data.
-            input0_curr = input0_next;
-            input1_curr = input1_next;
-            input2_curr = input2_next;
+            in0_s2 = in0_s3;
+            in1_s2 = in1_s3;
+            in2_s2 = in2_s3;
         }
 
         // --- Pipeline Epilogue ---
-        // Process and store the final chunk that was loaded but not processed in the loop.
+        // Store the second to last chunk
+        _mm_stream_si128((__m128i*)(dst), out0_s1);
+        _mm_stream_si128((__m128i*)(dst + 8), out1_s1);
+        _mm_stream_si128((__m128i*)(dst + 16), out2_s1);
+        _mm_stream_si128((__m128i*)(dst + 24), out3_s1);
+        dst += 32;
+
+        // Process and store the last chunk
+        __m128i out0_s2, out1_s2, out2_s2, out3_s2;
+        unpack_12bit_raw_xmm_inline(in0_s2, in1_s2, in2_s2, &out0_s2, &out1_s2, &out2_s2, &out3_s2);
+        _mm_stream_si128((__m128i*)(dst), out0_s2);
+        _mm_stream_si128((__m128i*)(dst + 8), out1_s2);
+        _mm_stream_si128((__m128i*)(dst + 16), out2_s2);
+        _mm_stream_si128((__m128i*)(dst + 24), out3_s2);
+        dst += 32;
+    } else if (num_chunks == 1) {
+        // Handle the case where there is only one full chunk
+        __m128i in0 = _mm_loadu_si128((const __m128i*)(src));
+        __m128i in1 = _mm_loadu_si128((const __m128i*)(src + 16));
+        __m128i in2 = _mm_loadu_si128((const __m128i*)(src + 32));
+        src += 48;
+
         __m128i out0, out1, out2, out3;
-        unpack_12bit_raw_xmm_inline(input0_curr, input1_curr, input2_curr, &out0, &out1, &out2, &out3);
+        unpack_12bit_raw_xmm_inline(in0, in1, in2, &out0, &out1, &out2, &out3);
+
         _mm_stream_si128((__m128i*)(dst), out0);
         _mm_stream_si128((__m128i*)(dst + 8), out1);
         _mm_stream_si128((__m128i*)(dst + 16), out2);
         _mm_stream_si128((__m128i*)(dst + 24), out3);
         dst += 32;
     }
+
 
     // Handle any remaining pixels that are not a multiple of 32
     int remaining_pixels = width % 32;

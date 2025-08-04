@@ -12,7 +12,7 @@ ext_modules = [
         "unpack_12bit_raw",
         sources=[
             "unpack_12bit_raw.pyx",
-            "core_intrinsic.c"
+            "core_intrinsic_V2.c"
         ],
         include_dirs=[np.get_include()],
         extra_compile_args=extra_compile_args,
