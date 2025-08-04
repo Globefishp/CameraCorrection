@@ -6,8 +6,33 @@ cimport numpy as np
 cimport cython
 
 # Import the C function declaration from the header file
-cdef extern from "core_intrinsic.h":
+# Note: The C function now requires the dst pointer to be 16-byte aligned.
+cdef extern from "core_intrinsic_V2.h": # Changed to V2 .h
     void unpack_12bit_raw(unsigned char *src, unsigned short *dst, int width)
+
+cdef np.ndarray _create_aligned_array(int num_pixels, size_t alignment):
+    """
+    Creates a 1D numpy array of uint16 with its data buffer aligned to `alignment` bytes.
+    """
+    cdef size_t itemsize = sizeof(np.uint16_t)
+    cdef size_t n_bytes = num_pixels * itemsize
+    
+    # Allocate a buffer with extra space to guarantee alignment can be achieved.
+    cdef np.ndarray[np.uint8_t, ndim=1, mode='c'] buffer = np.empty(n_bytes + alignment, dtype=np.uint8)
+    
+    # Get the memory address of the buffer's data
+    cdef size_t addr = <size_t>buffer.data
+    
+    # Calculate the aligned address. Formula: (addr + alignment - 1) & ~(alignment - 1)
+    cdef size_t aligned_addr = (addr + alignment - 1) & (~(alignment - 1))
+    
+    # Calculate the offset from the start of the buffer to the aligned address
+    cdef size_t offset = aligned_addr - addr
+    
+    # Create a new array view from the aligned buffer segment.
+    cdef np.ndarray[np.uint16_t, ndim=1, mode='c'] aligned_array = np.frombuffer(buffer, dtype=np.uint16, count=num_pixels, offset=<int>offset)
+    
+    return aligned_array
 
 def unpack_12bit_to_16bit(packed_array, int height, int width):
     """
@@ -49,9 +74,9 @@ def unpack_12bit_to_16bit(packed_array, int height, int width):
     cdef np.ndarray[np.uint8_t, ndim=1, mode='c'] flat_packed_array
     flat_packed_array = np.ascontiguousarray(np.ravel(packed_array), dtype=np.uint8)
 
-    # Create the 1D output array first
+    # Create the 1D output array with 16-byte alignment for SSE streaming stores
     cdef np.ndarray[np.uint16_t, ndim=1, mode='c'] unpacked_array_1d
-    unpacked_array_1d = np.empty(num_pixels, dtype=np.uint16)
+    unpacked_array_1d = _create_aligned_array(num_pixels, 16)
 
     # Get pointers to the data buffers of the numpy arrays
     cdef unsigned char* src_ptr = &flat_packed_array[0]
@@ -88,8 +113,8 @@ def unpack_12bit_to_16bit_fast(np.ndarray[np.uint8_t, ndim=1, mode='c'] packed_a
     """
     cdef int num_pixels = height * width
     
-    # Create the output numpy array for the 16-bit data
-    cdef np.ndarray[np.uint16_t, ndim=1, mode='c'] unpacked_array_1d = np.empty(num_pixels, dtype=np.uint16)
+    # Create the output numpy array with 16-byte alignment for SSE streaming stores
+    cdef np.ndarray[np.uint16_t, ndim=1, mode='c'] unpacked_array_1d = _create_aligned_array(num_pixels, 16)
 
     # Get pointers to the data buffers of the numpy arrays
     cdef unsigned char* src_ptr = &packed_array[0]

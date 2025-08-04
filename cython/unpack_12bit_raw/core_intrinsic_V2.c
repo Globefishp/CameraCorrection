@@ -3,21 +3,23 @@
 
 // Using CPU capabilities: SSE(_mm_shuffle_ps), SSE2(_mm_loadu/storeu_si128, _mm_srli_epi16, _mm_andnot/and/or_si128), SSSE3(_mm_shuffle_epi8), 
 
-// SIMD implementation (memory bound): 
-//   with aligned output array: 1.415 ± 0.097 ms, n=1000, 2448*2048, i9-14900K@5.4 GHz 
-// Read: 2448*2048*1.5Bpp=7.52 MB, Write: 2448*2048*2Bpp=10.02 MB. 
-// Total throughput: 12.4 GB/s, 2.3 GB/GHz (bytes per cycle.)
+// Trying 2x software pipeline.
+// 1.169 ± 0.091 ms, n=1000, with aligned output array, 2448*2048, i9-14900K@5.4 GHz
+// Total throughput: 15.0 GB/s, 2.78 GB/GHz (bytes per cycle.)
 
-// Naive C implementation:
-//   2.043 ± 0.114 ms, n=1000, 2448*2048, i9-14900K@5.4 GHz 
-// Total throughput: 8.59 GB/s, 1.59 GB/GHz (bytes per cycle.)
+#include "core_intrinsic_V2.h"
 
+static inline void unpack_12bit_raw_xmm_inline(
+     const __m128i input0, // group0
+     const __m128i input1, // temp
+     const __m128i input2, // group2
+           __m128i* out0, 
+           __m128i* out1, 
+           __m128i* out2, 
+           __m128i* out3)
+{       
+    // This inline version need register loads/stores handled by caller.
 
-// Forward declaration for the main function
-void unpack_12bit_raw(uint8_t *src, uint16_t *dst, int width);
-
-static inline void unpack_12bit_raw_xmm(uint8_t *src, uint16_t *dst)
-{
     // Using 128bit SIMD. In 256 bit implementation, we need vinsertf128, 
     //   which may be too slow and expensive (Latency 3, CPI 1)for this simple task.
     // By calculation, the core intrinsics latency is 11 (critical path, including loading 6), 4 step calc included.
@@ -43,10 +45,6 @@ static inline void unpack_12bit_raw_xmm(uint8_t *src, uint16_t *dst)
     //   blend result:
     //     bitwise or (or_si128, CPI 0.333) of branch 1 and branch 2.
 
-    // load data (Latency 6, CPI 0.333)
-    __m128i input0 = _mm_loadu_si128((__m128i const*) src); // group0 
-    __m128i input1 = _mm_loadu_si128((__m128i const*)(src + 16)); // just a temp input
-    __m128i input2 = _mm_loadu_si128((__m128i const*)(src + 32)); // group3
 
     __m128i group1 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(input0), _mm_castsi128_ps(input1), _MM_SHUFFLE(1, 0, 3, 2))); 
     __m128i group2 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(input1), _mm_castsi128_ps(input2), _MM_SHUFFLE(1, 0, 3, 2))); 
@@ -85,43 +83,82 @@ static inline void unpack_12bit_raw_xmm(uint8_t *src, uint16_t *dst)
     __m128i group3_b2 = _mm_and_si128(group3_shuf8, _mm_setr_epi16(0x000F, 0, 0x000F, 0, 0x000F, 0, 0x000F, 0));
 
     // blend
-    __m128i out0 = _mm_or_si128(group0_b1, group0_b2);
-    __m128i out1 = _mm_or_si128(group1_b1, group1_b2);
-    __m128i out2 = _mm_or_si128(group2_b1, group2_b2);
-    __m128i out3 = _mm_or_si128(group3_b1, group3_b2);
+           *out0 = _mm_or_si128(group0_b1, group0_b2);
+           *out1 = _mm_or_si128(group1_b1, group1_b2);
+           *out2 = _mm_or_si128(group2_b1, group2_b2);
+           *out3 = _mm_or_si128(group3_b1, group3_b2);
 
-    // Store results
-    _mm_storeu_si128((__m128i*)(dst)     , out0);
-    _mm_storeu_si128((__m128i*)(dst + 8) , out1);
-    _mm_storeu_si128((__m128i*)(dst + 16), out2);
-    _mm_storeu_si128((__m128i*)(dst + 24), out3);
 }
 
 /**
- * @brief Unpacks a 12-bit RAW image buffer to a 16-bit buffer using SIMD instructions.
+ * @brief Unpacks a 12-bit RAW image buffer to a 16-bit buffer using SIMD instructions
+ *        with a 2-stage software pipeline and streaming stores.
  * 
  * This function processes the image data in chunks of 32 pixels (48 bytes) for optimal
- * performance. Any remaining pixels at the end are handled by a standard C loop.
+ * performance. The main loop is software-pipelined to overlap memory I/O with computation,
+ * hiding latency and improving throughput. Any remaining pixels at the end are handled 
+ * by a standard C loop.
  * 
  * @param src Pointer to the source 12-bit RAW data buffer.
- * @param dst Pointer to the destination 16-bit buffer.
+ * @param dst Pointer to the destination 16-bit buffer. The destination address MUST be 
+ *            16-byte aligned for streaming stores to work correctly.
  * @param width The number of pixels to process. 
  *              NOTE: It is the caller's responsibility to ensure that the width is an even number.
  */
 void unpack_12bit_raw(uint8_t *src, uint16_t *dst, int width)
 {
     int i = 0;
+    // Process 32 pixels (48 bytes) per loop.
     int main_loop_limit = width - (width % 32);
 
-    // Main loop: process data in chunks of 32 pixels (48 bytes src -> 64 bytes dst)
-    for (i = 0; i < main_loop_limit; i += 32) {
-        unpack_12bit_raw_xmm(src, dst);
-        src += 48; // 32 pixels * 1.5 bytes/pixel
-        dst += 32; // 32 pixels * 2 bytes/pixel
+    if (main_loop_limit >= 32) {
+        // --- Pipeline Prologue ---
+        // Load data for the first chunk (chunk 0) into current registers.
+        __m128i input0_curr = _mm_loadu_si128((const __m128i*)(src));
+        __m128i input1_curr = _mm_loadu_si128((const __m128i*)(src + 16));
+        __m128i input2_curr = _mm_loadu_si128((const __m128i*)(src + 32));
+        src += 48;
+
+        // --- Pipelined Main Loop ---
+        // The loop starts from the second chunk (i=32) and goes up to the second-to-last chunk.
+        // In each iteration, we load the next chunk while processing the current one.
+        for (i = 32; i < main_loop_limit; i += 32) {
+            // Stage 2: Load data for the next chunk into next registers.
+            __m128i input0_next = _mm_loadu_si128((const __m128i*)(src));
+            __m128i input1_next = _mm_loadu_si128((const __m128i*)(src + 16));
+            __m128i input2_next = _mm_loadu_si128((const __m128i*)(src + 32));
+            src += 48;
+
+            // Stage 1: Process the current chunk (loaded in the previous iteration).
+            __m128i out0, out1, out2, out3;
+            unpack_12bit_raw_xmm_inline(input0_curr, input1_curr, input2_curr, &out0, &out1, &out2, &out3);
+
+            // Stage 1: Store the results of the processed chunk using streaming stores.
+            _mm_stream_si128((__m128i*)(dst), out0);
+            _mm_stream_si128((__m128i*)(dst + 8), out1);
+            _mm_stream_si128((__m128i*)(dst + 16), out2);
+            _mm_stream_si128((__m128i*)(dst + 24), out3);
+            dst += 32;
+
+            // Prepare for the next iteration: the 'next' data becomes the 'current' data.
+            input0_curr = input0_next;
+            input1_curr = input1_next;
+            input2_curr = input2_next;
+        }
+
+        // --- Pipeline Epilogue ---
+        // Process and store the final chunk that was loaded but not processed in the loop.
+        __m128i out0, out1, out2, out3;
+        unpack_12bit_raw_xmm_inline(input0_curr, input1_curr, input2_curr, &out0, &out1, &out2, &out3);
+        _mm_stream_si128((__m128i*)(dst), out0);
+        _mm_stream_si128((__m128i*)(dst + 8), out1);
+        _mm_stream_si128((__m128i*)(dst + 16), out2);
+        _mm_stream_si128((__m128i*)(dst + 24), out3);
+        dst += 32;
     }
 
     // Handle any remaining pixels that are not a multiple of 32
-    int remaining_pixels = width - main_loop_limit;
+    int remaining_pixels = width % 32;
     if (remaining_pixels > 0) {
         for (i = 0; i < remaining_pixels / 2; ++i) {
             uint8_t byte0 = src[i * 3];
@@ -132,14 +169,4 @@ void unpack_12bit_raw(uint8_t *src, uint16_t *dst, int width)
             dst[i * 2 + 1] = (uint16_t)(byte2 << 4) | (uint16_t)(byte1 >> 4);
         }
     }
-
-    // // Naive C implementation for compiler auto-vectorization test
-    // for (int i = 0; i < width / 2; ++i) {
-    //     uint8_t byte0 = src[i * 3];
-    //     uint8_t byte1 = src[i * 3 + 1];
-    //     uint8_t byte2 = src[i * 3 + 2];
-
-    //     dst[i * 2] = (uint16_t)(byte0 << 4) | (uint16_t)(byte1 & 0x0F);
-    //     dst[i * 2 + 1] = (uint16_t)(byte2 << 4) | (uint16_t)(byte1 >> 4);
-    // }
 }
