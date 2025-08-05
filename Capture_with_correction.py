@@ -1,6 +1,6 @@
 import numpy as np
 import mvsdk
-from huateng_camera_v2_tc_mod import Camera
+from huateng_camera_v2_tc_raw import Camera
 from raw_processing import raw_processing
 from raw_processing_jit import raw_processing_jit
 from raw_processing_jit_V2 import raw_processing_jit_V2
@@ -43,7 +43,7 @@ raw_processor_list =  ['raw_processing_cy_V7',
 cy_V6_mode = 'scatter'
 
 EXPOSURE_TIME = 10 # ms
-correction_info = np.load('./correction_results.npy', allow_pickle=True).item()
+correction_info = np.load('./correction_results_D50.npy', allow_pickle=True).item()
 correction_info['wb_params'] = (1.87217887201, 1.27358336204, 1.0, -16.2625453031, -13.099179932, 0.0)
 
 XYZ_TO_SRGB = np.array([[ 3.2404542, -1.5371385, -0.4985314],
@@ -108,7 +108,7 @@ if current_jit_func_name == 'raw_processing_cy_V11':
 plt.imsave('srgb_img.png', srgb_img)
 
 # 2. 多次运行并记录时间
-num_runs = 1000
+num_runs = 100
 run_times = []
 timings_total = np.zeros(4)
 print(f"\n--- 运行 {num_runs} 次 {current_jit_func_name} 函数并记录时间 ---")
