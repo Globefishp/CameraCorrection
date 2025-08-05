@@ -1,0 +1,569 @@
+$LN184@c_full_pip:
+
+; 191  :         for (int c = 0; c < W_orig; ++c) {
+
+	mov	r10, QWORD PTR b_line_buffer$1$[rbp]
+$LN81@c_full_pip:
+	cmp	rdi, r13
+	jge	$LN166@c_full_pip
+	mov	rax, r13
+	sub	rax, rdi
+	cmp	rax, 4
+	jl	$LN163@c_full_pip
+	mov	r8, QWORD PTR rgb_line_buffer$[rsp]
+	lea	rdx, QWORD PTR [r13-3]
+	vmovss	xmm7, DWORD PTR r_BLC$1$[rbp]
+	sub	rdx, rdi
+	lea	rcx, QWORD PTR [r12+4]
+	mov	r9, r10
+	lea	rcx, QWORD PTR [rcx+rdi*4]
+	mov	r10, rbx
+	dec	rdx
+	mov	rbx, QWORD PTR b_ccm_line$1$[rbp]
+	mov	r11, r14
+	shr	rdx, 2
+	sub	r8, r12
+	sub	r9, r12
+	sub	r10, r12
+	sub	r11, r12
+	sub	rbx, r12
+	inc	rdx
+	vxorps	xmm6, xmm6, xmm6
+	vcvtsi2ss xmm6, xmm6, DWORD PTR lut_max_index$1$[rbp]
+	lea	rdi, QWORD PTR [rdi+rdx*4]
+	npad	9
+$LL143@c_full_pip:
+
+; 192  :             float r_in = r_line_buffer[c];
+; 193  :             float g_in = g_line_buffer[c];
+; 194  :             float b_in = b_line_buffer[c];
+; 195  :             
+; 196  :             // White-balance in native range
+; 197  :             r_in = (r_in - r_BLC) * r_gain ;
+
+	vmovss	xmm0, DWORD PTR [r8+rcx-4]
+	vsubss	xmm1, xmm0, xmm7
+
+; 198  :             g_in = (g_in - g_BLC) * g_gain ;
+
+	vmovss	xmm0, DWORD PTR [rcx-4]
+	vmulss	xmm2, xmm1, xmm13
+
+; 200  :             // Clip + Normalize
+; 201  :             r_in = (r_in < clip_max_level) ? r_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm2, xmm14
+	vsubss	xmm1, xmm0, DWORD PTR g_BLC$1$[rbp]
+	vmovss	xmm0, DWORD PTR [r9+rcx-4]
+	vmulss	xmm3, xmm1, xmm12
+	vsubss	xmm1, xmm0, DWORD PTR b_BLC$1$[rbp]
+	vmulss	xmm4, xmm1, xmm8
+	jae	SHORT $LN119@c_full_pip
+	vmulss	xmm5, xmm2, xmm10
+	jmp	SHORT $LN120@c_full_pip
+$LN167@c_full_pip:
+
+; 191  :         for (int c = 0; c < W_orig; ++c) {
+
+	mov	rbx, QWORD PTR ccm_line_buffer$[rsp]
+	jmp	$LN184@c_full_pip
+$LN180@c_full_pip:
+
+; 184  :         }
+; 185  :         QueryPerformanceCounter(&end);
+
+	mov	r10, rcx
+	jmp	$LN81@c_full_pip
+$LN119@c_full_pip:
+
+; 200  :             // Clip + Normalize
+; 201  :             r_in = (r_in < clip_max_level) ? r_in * inv_clip_max_level : 1.0f;
+
+	vmovaps	xmm5, xmm9
+$LN120@c_full_pip:
+
+; 202  :             g_in = (g_in < clip_max_level) ? g_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm3, xmm14
+	jae	SHORT $LN121@c_full_pip
+	vmulss	xmm1, xmm3, xmm10
+	jmp	SHORT $LN122@c_full_pip
+$LN121@c_full_pip:
+	vmovaps	xmm1, xmm9
+$LN122@c_full_pip:
+
+; 203  :             b_in = (b_in < clip_max_level) ? b_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm4, xmm14
+	jae	SHORT $LN123@c_full_pip
+	vmulss	xmm0, xmm4, xmm10
+	jmp	SHORT $LN124@c_full_pip
+$LN123@c_full_pip:
+	vmovaps	xmm0, xmm9
+$LN124@c_full_pip:
+	vmaxss	xmm3, xmm0, xmm15
+	vmaxss	xmm2, xmm1, xmm15
+	vmaxss	xmm4, xmm5, xmm15
+
+; 204  :             // Prevent underflow.
+; 205  :             r_in = (r_in > 0.0f) ? r_in : 0.0f;
+; 206  :             g_in = (g_in > 0.0f) ? g_in : 0.0f;
+; 207  :             b_in = (b_in > 0.0f) ? b_in : 0.0f;
+; 208  :             
+; 209  :             // CCM
+; 210  :             // R channel 
+; 211  :             float val_r = r_in * m00 + g_in * m01 + b_in * m02;
+
+	vmulss	xmm0, xmm4, DWORD PTR m00$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9119[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9118[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 215  :             
+; 216  :             // G channel
+; 217  :             float val_g = r_in * m10 + g_in * m11 + b_in * m12;
+
+	vmulss	xmm0, xmm4, DWORD PTR m10$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9116[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9115[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	vmaxss	xmm1, xmm0, xmm15
+
+; 221  : 
+; 222  :             // B channel
+; 223  :             float val_b = r_in * m20 + g_in * m21 + b_in * m22;
+
+	vmulss	xmm0, xmm4, DWORD PTR m20$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9114[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9113[rbp]
+	mov	DWORD PTR [r10+rcx-4], eax
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [r11+rcx-4], eax
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 224  :             val_b = (val_b < 1.0f) ? val_b : 1.0f;
+; 225  :             val_b = (val_b > 0.0f) ? val_b : 0.0f;
+; 226  :             b_ccm_line[c] = (int)(val_b * lut_max_index + 0.5f);
+
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [rbx+rcx-4], eax
+	vmovss	xmm0, DWORD PTR [r8+rcx]
+	vmovss	xmm2, DWORD PTR [r9+rcx]
+	vsubss	xmm1, xmm0, xmm7
+	vmovss	xmm0, DWORD PTR [rcx]
+	vmulss	xmm4, xmm1, xmm13
+	vcomiss	xmm4, xmm14
+	vsubss	xmm1, xmm0, DWORD PTR g_BLC$1$[rbp]
+	vsubss	xmm0, xmm2, DWORD PTR b_BLC$1$[rbp]
+	vmulss	xmm5, xmm0, xmm8
+	vmulss	xmm3, xmm1, xmm12
+	jae	SHORT $LN125@c_full_pip
+
+; 200  :             // Clip + Normalize
+; 201  :             r_in = (r_in < clip_max_level) ? r_in * inv_clip_max_level : 1.0f;
+
+	vmulss	xmm2, xmm4, xmm10
+	jmp	SHORT $LN126@c_full_pip
+$LN125@c_full_pip:
+	vmovaps	xmm2, xmm9
+$LN126@c_full_pip:
+
+; 202  :             g_in = (g_in < clip_max_level) ? g_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm3, xmm14
+	jae	SHORT $LN127@c_full_pip
+	vmulss	xmm1, xmm3, xmm10
+	jmp	SHORT $LN128@c_full_pip
+$LN127@c_full_pip:
+	vmovaps	xmm1, xmm9
+$LN128@c_full_pip:
+
+; 203  :             b_in = (b_in < clip_max_level) ? b_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm5, xmm14
+	jae	SHORT $LN129@c_full_pip
+	vmulss	xmm0, xmm5, xmm10
+	jmp	SHORT $LN130@c_full_pip
+$LN129@c_full_pip:
+	vmovaps	xmm0, xmm9
+$LN130@c_full_pip:
+	vmaxss	xmm3, xmm0, xmm15
+	vmaxss	xmm4, xmm2, xmm15
+
+; 204  :             // Prevent underflow.
+; 205  :             r_in = (r_in > 0.0f) ? r_in : 0.0f;
+; 206  :             g_in = (g_in > 0.0f) ? g_in : 0.0f;
+; 207  :             b_in = (b_in > 0.0f) ? b_in : 0.0f;
+; 208  :             
+; 209  :             // CCM
+; 210  :             // R channel 
+; 211  :             float val_r = r_in * m00 + g_in * m01 + b_in * m02;
+
+	vmulss	xmm0, xmm4, DWORD PTR m00$1$[rbp]
+	vmaxss	xmm2, xmm1, xmm15
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9119[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9118[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 215  :             
+; 216  :             // G channel
+; 217  :             float val_g = r_in * m10 + g_in * m11 + b_in * m12;
+
+	vmulss	xmm0, xmm4, DWORD PTR m10$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9116[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9115[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	vmaxss	xmm1, xmm0, xmm15
+
+; 221  : 
+; 222  :             // B channel
+; 223  :             float val_b = r_in * m20 + g_in * m21 + b_in * m22;
+
+	vmulss	xmm0, xmm4, DWORD PTR m20$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9114[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9113[rbp]
+	mov	DWORD PTR [r10+rcx], eax
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [r11+rcx], eax
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 224  :             val_b = (val_b < 1.0f) ? val_b : 1.0f;
+; 225  :             val_b = (val_b > 0.0f) ? val_b : 0.0f;
+; 226  :             b_ccm_line[c] = (int)(val_b * lut_max_index + 0.5f);
+
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [rbx+rcx], eax
+	vmovss	xmm0, DWORD PTR [r8+rcx+4]
+	vmovss	xmm2, DWORD PTR [r9+rcx+4]
+	vsubss	xmm1, xmm0, xmm7
+	vmovss	xmm0, DWORD PTR [rcx+4]
+	vmulss	xmm4, xmm1, xmm13
+	vcomiss	xmm4, xmm14
+	vsubss	xmm1, xmm0, DWORD PTR g_BLC$1$[rbp]
+	vsubss	xmm0, xmm2, DWORD PTR b_BLC$1$[rbp]
+	vmulss	xmm5, xmm0, xmm8
+	vmulss	xmm3, xmm1, xmm12
+	jae	SHORT $LN131@c_full_pip
+
+; 200  :             // Clip + Normalize
+; 201  :             r_in = (r_in < clip_max_level) ? r_in * inv_clip_max_level : 1.0f;
+
+	vmulss	xmm2, xmm4, xmm10
+	jmp	SHORT $LN132@c_full_pip
+$LN131@c_full_pip:
+	vmovaps	xmm2, xmm9
+$LN132@c_full_pip:
+
+; 202  :             g_in = (g_in < clip_max_level) ? g_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm3, xmm14
+	jae	SHORT $LN133@c_full_pip
+	vmulss	xmm1, xmm3, xmm10
+	jmp	SHORT $LN134@c_full_pip
+$LN133@c_full_pip:
+	vmovaps	xmm1, xmm9
+$LN134@c_full_pip:
+
+; 203  :             b_in = (b_in < clip_max_level) ? b_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm5, xmm14
+	jae	SHORT $LN135@c_full_pip
+	vmulss	xmm0, xmm5, xmm10
+	jmp	SHORT $LN136@c_full_pip
+$LN135@c_full_pip:
+	vmovaps	xmm0, xmm9
+$LN136@c_full_pip:
+	vmaxss	xmm3, xmm0, xmm15
+	vmaxss	xmm4, xmm2, xmm15
+
+; 204  :             // Prevent underflow.
+; 205  :             r_in = (r_in > 0.0f) ? r_in : 0.0f;
+; 206  :             g_in = (g_in > 0.0f) ? g_in : 0.0f;
+; 207  :             b_in = (b_in > 0.0f) ? b_in : 0.0f;
+; 208  :             
+; 209  :             // CCM
+; 210  :             // R channel 
+; 211  :             float val_r = r_in * m00 + g_in * m01 + b_in * m02;
+
+	vmulss	xmm0, xmm4, DWORD PTR m00$1$[rbp]
+	vmaxss	xmm2, xmm1, xmm15
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9119[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9118[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 215  :             
+; 216  :             // G channel
+; 217  :             float val_g = r_in * m10 + g_in * m11 + b_in * m12;
+
+	vmulss	xmm0, xmm4, DWORD PTR m10$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9116[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9115[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	vmaxss	xmm1, xmm0, xmm15
+
+; 221  : 
+; 222  :             // B channel
+; 223  :             float val_b = r_in * m20 + g_in * m21 + b_in * m22;
+
+	vmulss	xmm0, xmm4, DWORD PTR m20$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9114[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9113[rbp]
+	mov	DWORD PTR [r10+rcx+4], eax
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [r11+rcx+4], eax
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 224  :             val_b = (val_b < 1.0f) ? val_b : 1.0f;
+; 225  :             val_b = (val_b > 0.0f) ? val_b : 0.0f;
+; 226  :             b_ccm_line[c] = (int)(val_b * lut_max_index + 0.5f);
+
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [rbx+rcx+4], eax
+	vmovss	xmm0, DWORD PTR [r8+rcx+8]
+	vmovss	xmm2, DWORD PTR [r9+rcx+8]
+	vsubss	xmm1, xmm0, xmm7
+	vmovss	xmm0, DWORD PTR [rcx+8]
+	vmulss	xmm4, xmm1, xmm13
+	vcomiss	xmm4, xmm14
+	vsubss	xmm1, xmm0, DWORD PTR g_BLC$1$[rbp]
+	vsubss	xmm0, xmm2, DWORD PTR b_BLC$1$[rbp]
+	vmulss	xmm5, xmm0, xmm8
+	vmulss	xmm3, xmm1, xmm12
+	jae	SHORT $LN137@c_full_pip
+
+; 200  :             // Clip + Normalize
+; 201  :             r_in = (r_in < clip_max_level) ? r_in * inv_clip_max_level : 1.0f;
+
+	vmulss	xmm2, xmm4, xmm10
+	jmp	SHORT $LN138@c_full_pip
+$LN137@c_full_pip:
+	vmovaps	xmm2, xmm9
+$LN138@c_full_pip:
+
+; 202  :             g_in = (g_in < clip_max_level) ? g_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm3, xmm14
+	jae	SHORT $LN139@c_full_pip
+	vmulss	xmm1, xmm3, xmm10
+	jmp	SHORT $LN140@c_full_pip
+$LN139@c_full_pip:
+	vmovaps	xmm1, xmm9
+$LN140@c_full_pip:
+
+; 203  :             b_in = (b_in < clip_max_level) ? b_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm5, xmm14
+	jae	SHORT $LN141@c_full_pip
+	vmulss	xmm0, xmm5, xmm10
+	jmp	SHORT $LN142@c_full_pip
+$LN141@c_full_pip:
+	vmovaps	xmm0, xmm9
+$LN142@c_full_pip:
+	vmaxss	xmm3, xmm0, xmm15
+	vmaxss	xmm4, xmm2, xmm15
+
+; 204  :             // Prevent underflow.
+; 205  :             r_in = (r_in > 0.0f) ? r_in : 0.0f;
+; 206  :             g_in = (g_in > 0.0f) ? g_in : 0.0f;
+; 207  :             b_in = (b_in > 0.0f) ? b_in : 0.0f;
+; 208  :             
+; 209  :             // CCM
+; 210  :             // R channel 
+; 211  :             float val_r = r_in * m00 + g_in * m01 + b_in * m02;
+
+	vmulss	xmm0, xmm4, DWORD PTR m00$1$[rbp]
+	vmaxss	xmm2, xmm1, xmm15
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9119[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9118[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 215  :             
+; 216  :             // G channel
+; 217  :             float val_g = r_in * m10 + g_in * m11 + b_in * m12;
+
+	vmulss	xmm0, xmm4, DWORD PTR m10$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9116[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9115[rbp]
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 221  : 
+; 222  :             // B channel
+; 223  :             float val_b = r_in * m20 + g_in * m21 + b_in * m22;
+
+	vmulss	xmm0, xmm4, DWORD PTR m20$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9114[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9113[rbp]
+	mov	DWORD PTR [r10+rcx+8], eax
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [r11+rcx+8], eax
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 224  :             val_b = (val_b < 1.0f) ? val_b : 1.0f;
+; 225  :             val_b = (val_b > 0.0f) ? val_b : 0.0f;
+; 226  :             b_ccm_line[c] = (int)(val_b * lut_max_index + 0.5f);
+
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [rbx+rcx+8], eax
+	add	rcx, 16
+	sub	rdx, 1
+	jne	$LL143@c_full_pip
+	vmovss	xmm7, DWORD PTR __real@3e800000
+$LN163@c_full_pip:
+
+; 191  :         for (int c = 0; c < W_orig; ++c) {
+
+	mov	rbx, QWORD PTR ccm_line_buffer$[rsp]
+	cmp	rdi, r13
+	jge	$LN117@c_full_pip
+	mov	rdx, QWORD PTR rgb_line_buffer$[rsp]
+	lea	rcx, QWORD PTR [r12+rdi*4]
+	mov	r8, QWORD PTR b_line_buffer$1$[rbp]
+	mov	r9, rbx
+	mov	r11, QWORD PTR b_ccm_line$1$[rbp]
+	mov	r10, r14
+	vmovss	xmm7, DWORD PTR r_BLC$1$[rbp]
+	sub	rdx, r12
+	sub	r8, r12
+	sub	r9, r12
+	sub	r10, r12
+	vxorps	xmm6, xmm6, xmm6
+	vcvtsi2ss xmm6, xmm6, DWORD PTR lut_max_index$1$[rbp]
+	sub	r11, r12
+$LC74@c_full_pip:
+
+; 192  :             float r_in = r_line_buffer[c];
+; 193  :             float g_in = g_line_buffer[c];
+; 194  :             float b_in = b_line_buffer[c];
+; 195  :             
+; 196  :             // White-balance in native range
+; 197  :             r_in = (r_in - r_BLC) * r_gain ;
+
+	vmovss	xmm0, DWORD PTR [rcx+rdx]
+
+; 199  :             b_in = (b_in - b_BLC) * b_gain ;
+
+	vmovss	xmm2, DWORD PTR [rcx+r8]
+	vsubss	xmm1, xmm0, xmm7
+	vmovss	xmm0, DWORD PTR [rcx]
+	vmulss	xmm3, xmm1, xmm13
+
+; 200  :             // Clip + Normalize
+; 201  :             r_in = (r_in < clip_max_level) ? r_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm3, xmm14
+	vsubss	xmm1, xmm0, DWORD PTR g_BLC$1$[rbp]
+	vsubss	xmm0, xmm2, DWORD PTR b_BLC$1$[rbp]
+	vmulss	xmm5, xmm0, xmm8
+	vmulss	xmm4, xmm1, xmm12
+	jae	SHORT $LN75@c_full_pip
+	vmulss	xmm2, xmm3, xmm10
+	jmp	SHORT $LN76@c_full_pip
+$LN75@c_full_pip:
+	vmovaps	xmm2, xmm9
+$LN76@c_full_pip:
+
+; 202  :             g_in = (g_in < clip_max_level) ? g_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm4, xmm14
+	jae	SHORT $LN77@c_full_pip
+	vmulss	xmm1, xmm4, xmm10
+	jmp	SHORT $LN78@c_full_pip
+$LN77@c_full_pip:
+	vmovaps	xmm1, xmm9
+$LN78@c_full_pip:
+
+; 203  :             b_in = (b_in < clip_max_level) ? b_in * inv_clip_max_level : 1.0f;
+
+	vcomiss	xmm5, xmm14
+	jae	SHORT $LN79@c_full_pip
+	vmulss	xmm0, xmm5, xmm10
+	jmp	SHORT $LN80@c_full_pip
+$LN79@c_full_pip:
+	vmovaps	xmm0, xmm9
+$LN80@c_full_pip:
+	vmaxss	xmm3, xmm0, xmm15
+	vmaxss	xmm4, xmm2, xmm15
+
+; 204  :             // Prevent underflow.
+; 205  :             r_in = (r_in > 0.0f) ? r_in : 0.0f;
+; 206  :             g_in = (g_in > 0.0f) ? g_in : 0.0f;
+; 207  :             b_in = (b_in > 0.0f) ? b_in : 0.0f;
+; 208  :             
+; 209  :             // CCM
+; 210  :             // R channel 
+; 211  :             float val_r = r_in * m00 + g_in * m01 + b_in * m02;
+
+	vmulss	xmm0, xmm4, DWORD PTR m00$1$[rbp]
+	vmaxss	xmm2, xmm1, xmm15
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9119[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9118[rbp]
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 215  :             
+; 216  :             // G channel
+; 217  :             float val_g = r_in * m10 + g_in * m11 + b_in * m12;
+
+	vmulss	xmm0, xmm4, DWORD PTR m10$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9116[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9115[rbp]
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 221  : 
+; 222  :             // B channel
+; 223  :             float val_b = r_in * m20 + g_in * m21 + b_in * m22;
+
+	vmulss	xmm0, xmm4, DWORD PTR m20$1$[rbp]
+	vfmadd231ss xmm0, xmm2, DWORD PTR tv9114[rbp]
+	vfmadd231ss xmm0, xmm3, DWORD PTR tv9113[rbp]
+	mov	DWORD PTR [r9+rcx], eax
+	inc	rdi
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [r10+rcx], eax
+	vminss	xmm0, xmm0, xmm9
+	vmaxss	xmm1, xmm0, xmm15
+
+; 224  :             val_b = (val_b < 1.0f) ? val_b : 1.0f;
+; 225  :             val_b = (val_b > 0.0f) ? val_b : 0.0f;
+; 226  :             b_ccm_line[c] = (int)(val_b * lut_max_index + 0.5f);
+
+	vfmadd213ss xmm1, xmm6, xmm11
+	vcvttss2si eax, xmm1
+	mov	DWORD PTR [r11+rcx], eax
+	add	rcx, 4
+	cmp	rdi, r13
+	jl	$LC74@c_full_pip
+
+; 191  :         for (int c = 0; c < W_orig; ++c) {
+
+	vmovss	xmm7, DWORD PTR __real@3e800000
+	jmp	SHORT $LN117@c_full_pip

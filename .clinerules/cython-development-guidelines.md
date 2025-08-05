@@ -8,11 +8,16 @@
 ## Cython 编码规范
 -   **Cython的本质**: 尽管拥有许多C的特性，但Cython本质上是Python的超集，而不是C的超集。在编写代码时，务必注意Cython本身的限制，它不拥有全部的C特性。
 -   **内联函数**: 使用 `cdef inline return_type func_name()` 的语法来定义内联函数，而不是 `cdef static inline ...`。
+-   **数组定义**: 可以使用`cdef int[4] g = [1, 2, 3, 4]`来定义数组，这种Java-style的写法是被推荐的，而`cdef int g[4]`这种C-style的写法被弃用了。
 -   **`nogil` 和 `prange` 块**:
     -   不要在 `with nogil` 或 `prange` 块内部使用 `cdef` 声明变量。所有变量必须在块外部提前声明。
+    -   在`nogil`函数内部，可以声明一般C变量，但不能声明Python对象，如利用np.empty初始化memoryview。这些memoryview应该在Python`def`类型的函数中声明好，然后传入nogil标记的`cdef`C类型函数。
     -   在 `prange` 循环中，通过在循环外声明并在循环内使用非原地操作（non-in-place operation）赋值来创建私有变量。
     -   注意区分私有变量和规约变量（reduction variable）。原地赋值操作会将变量视为规约变量，这可能导致编译错误。
     -   如果需要更灵活的内存操作，可以在 `prange` 外部声明指针，在循环内部为其分配内存。使用此方法时必须确保逻辑正确性。
+-   **`const`和`volatile` 限定符**: 
+    -   在Cython中，`const`主要用于函数签名中，此时使用和C类似。如`cdef void pointer_to_const_int(const int* value)`定义了一个不可变指针指向可变值；
+    -   不应在函数体中定义`const`变量为运行时依赖于其他变量的值（如函数中书写`cdef const inv_x = 1.0 / x`是不被允许的，因为依赖`x`的取值）。
 -   **浮点数字面量**: 必须显式指定类型，例如 `<float>4.0`，而不是使用C风格的 `4.0f`。
 -   **语法风格**:
     -   当Cython提供Python风格和C风格的两种语法时（例如 `@cython.inline` vs `cdef inline`），优先选择字面上更容易理解、且与上下文匹配的写法。
@@ -21,7 +26,7 @@
 ## 代码优化策略
 -   **优化顺序**: 严格遵循以下优化顺序：
     1.  **算法优化**: 首先确保使用的是最高效的算法。
-    2.  **计算效率优化**: 关注内存局部性（memory locality）和SIMD（单指令多数据流）优化。
+    2.  **计算效率优化**: 关注SIMD（单指令多数据流）和优内存局部性（memory locality）化。
     3.  **OpenMP多线程优化**: 在前两步优化到满意程度后，最后再考虑使用OpenMP进行并行化。
 -   **增量优化**:
     -   可以顺手进行一些细节优化，例如通过声明字面量类型来防止不必要的隐式类型提升。

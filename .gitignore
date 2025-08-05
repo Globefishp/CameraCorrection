@@ -1,4 +1,5 @@
 __pycache__
+.VSCodeCounter
 build
 cython/raw_processing_V3/*.c
 cython/raw_processing_V3/*.cpp
