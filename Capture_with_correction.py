@@ -22,6 +22,7 @@ from raw_processing_cy_V8 import RawV8Processor
 from raw_processing_cy_V9 import RawV9Processor
 from raw_processing_cy_V10 import RawV10Processor
 from raw_processing_cy_V11 import RawV11Processor
+from raw_processing_cy_V12 import RawV12Processor
 
 import matplotlib.pyplot as plt
 import time
@@ -29,15 +30,19 @@ import cProfile
 import pstats
 
 current_jit_func = raw_processing_cy_V5 # before cy_V7, except for cy_V4
-cy_processor = RawV11Processor # after cy_V7
-current_jit_func_name = 'raw_processing_cy_V11'
+cy_processor = RawV12Processor # after cy_V7
+current_jit_func_name = 'raw_processing_cy_V12'
 
 raw_processor_list =  ['raw_processing_cy_V7', 
                        'raw_processing_cy_V8', 
                        'raw_processing_cy_V9', 
                        'raw_processing_cy_V10',
                        'raw_processing_cy_V11',
+                       'raw_processing_cy_V12',
                        ]
+uint16_list = ['raw_processing_cy_V11', 'raw_processing_cy_V12']
+out_list = ['raw_processing_cy_V12']
+image_size = (2048, 2448)
 
 
 cy_V6_mode = 'scatter'
@@ -79,7 +84,7 @@ elif current_jit_func_name == 'raw_processing_cy_V6':
                             mode=cy_V6_mode
                             )
 elif current_jit_func_name in raw_processor_list:
-    processor = cy_processor(2048, 2448, black_level=32,
+    processor = cy_processor(*image_size, black_level=32,
                                ADC_max_level=4096,
                                bayer_pattern='BGGR',
                                wb_params=correction_info['wb_params'],
@@ -87,7 +92,11 @@ elif current_jit_func_name in raw_processor_list:
                                render_mtx=XYZ_TO_SRGB,
                                gamma='BT709',
                                )
-    srgb_img = processor.process(img)
+    if current_jit_func_name in out_list:
+        srgb_img = np.empty((*image_size, 3), dtype=np.uint16)
+        processor.process(img, out=srgb_img)
+    else:
+        srgb_img = processor.process(img)
 else:
     srgb_img = current_jit_func(img, 
                             black_level=32, 
@@ -102,25 +111,31 @@ else:
 print(f'Img value range:[{srgb_img.max(), srgb_img.min()}]')
 print(f'Img size:{srgb_img.shape}')
 # Save img using matplotlib
-if current_jit_func_name == 'raw_processing_cy_V11':
+if current_jit_func_name in uint16_list:
     # uint16->uint8
     srgb_img = (srgb_img >> 8).astype(np.uint8)
 plt.imsave('srgb_img.png', srgb_img)
 
 # 2. 多次运行并记录时间
-num_runs = 100
+num_runs = 1000
 run_times = []
 timings_total = np.zeros(4)
 print(f"\n--- 运行 {num_runs} 次 {current_jit_func_name} 函数并记录时间 ---")
+out_buf = np.empty((*image_size, 3), dtype=np.uint16)
 for _ in range(num_runs):
     if current_jit_func_name == 'raw_processing_cy_V4':
         start_time = time.perf_counter()
         processor.process(img)
         end_time = time.perf_counter()
     elif current_jit_func_name in raw_processor_list:
-        start_time = time.perf_counter()
-        processor.process(img)
-        end_time = time.perf_counter()
+        if current_jit_func_name in out_list:
+            start_time = time.perf_counter()
+            processor.process(img, out=out_buf)
+            end_time = time.perf_counter()
+        else:
+            start_time = time.perf_counter()
+            processor.process(img)
+            end_time = time.perf_counter()
     elif current_jit_func_name == 'raw_processing_cy_V6':
         start_time = time.perf_counter()
         current_jit_func(img, 

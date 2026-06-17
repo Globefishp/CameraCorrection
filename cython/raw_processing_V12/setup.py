@@ -8,7 +8,7 @@ import shutil
 
 # --- Argument parsing ---
 # Use a fixed module name for this specific setup script
-module_name = 'raw_processing_cy_V11'
+module_name = 'raw_processing_cy_V12'
 pyx_source_file = f"{module_name}.pyx"
 c_source_file = "raw_processing_core.c"
 
