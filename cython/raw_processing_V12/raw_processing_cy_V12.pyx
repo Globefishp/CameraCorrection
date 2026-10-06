@@ -48,7 +48,7 @@ cdef extern from "raw_processing_core.h":
         long long* timing_results
     )
 
-cdef c_create_bt709_lut(int size=65536):
+cdef c_create_bt709_lut(int size=65536, float max_level=65536.0):
     """
     Creates a lookup table (LUT) for BT.709 Gamma correction, outputting uint16 values.
     This is a Python-facing function that returns a NumPy array.
@@ -72,7 +72,7 @@ cdef c_create_bt709_lut(int size=65536):
             elif nonlinear_output_f > 1.0:
                 nonlinear_output_f = 1.0
                 
-            lut[i] = <np.uint16_t>(nonlinear_output_f * 65535.0 + 0.5)
+            lut[i] = <np.uint16_t>(nonlinear_output_f * max_level + 0.5)
     return lut
 
 
@@ -94,7 +94,10 @@ cdef class RawV12Processor:
     cdef object rgb_line_buffer
     cdef object ccm_line_buffer
 
-    def __cinit__(self, int H_orig, int W_orig, int black_level, int ADC_max_level, str bayer_pattern,
+    def __cinit__(self, 
+                  int H_orig, int W_orig, 
+                  int black_level, int ADC_max_level, 
+                  str bayer_pattern,
                   tuple wb_params, np.ndarray fwd_mtx, np.ndarray render_mtx,
                   str gamma='BT709', int gamma_lut_size=1024, bint streaming=False):
         """
@@ -113,7 +116,8 @@ cdef class RawV12Processor:
         self.conversion_mtx = np.dot(c_render_mtx, c_fwd_mtx)
 
         if gamma == 'BT709':
-            self.gamma_lut = c_create_bt709_lut(size=gamma_lut_size)
+            # Result image will have the same MAX level as ADC max.
+            self.gamma_lut = c_create_bt709_lut(size=gamma_lut_size, max_level=ADC_max_level) 
         else:
             raise NotImplementedError(f"Gamma '{gamma}' is not supported.")
 
@@ -134,7 +138,7 @@ cdef class RawV12Processor:
         """
         Processes a single Bayer RAW image frame by calling the external C function.
         """
-        # Ensure input image is of the correct type and C-contiguous
+        # Ensure input image is of the correct type and C-contiguous (TODO: add specific path for 8bit image to avoid memory copy?)
         cdef np.ndarray[np.uint16_t, ndim=2, mode='c'] c_img = np.ascontiguousarray(img, dtype=np.uint16)
 
         # Create typed memoryviews as local variables before passing to C
@@ -142,9 +146,9 @@ cdef class RawV12Processor:
         if out is not None: # prefer using `out`
             if out.dtype != np.uint16:
                 raise TypeError(f"Output buffer dtype must be np.uint16, got {out.dtype}")
-            if out.ndim != 3 or out.shape[0] != self.H_orig or out.shape[1] != self.W_orig or out.shape[2] != 3:
+            if out.size < img.size * 3:
                 raise ValueError(
-                    f"Output buffer shape mismatch. Expected ({self.H_orig}, {self.W_orig}, 3)."
+                    f"Output buffer size must be at least {img.size * 3} elements, got {out.size}."
                 )
             if not out.flags['C_CONTIGUOUS']:
                 raise ValueError(
@@ -174,7 +178,8 @@ cdef class RawV12Processor:
         # Call the core C pipeline with pointers to the NumPy array data
         c_full_pipeline(
             &c_img[0, 0],
-            self.H_orig, self.W_orig,
+            img.shape[0] if img.shape[0] <= self.H_orig else self.H_orig, 
+            img.shape[1] if img.shape[1] <= self.W_orig else self.W_orig, # Pass in `img.shape` for compatibility with smaller image?
             self.black_level,
             self.r_gain, self.g_gain, self.b_gain,
             self.r_dBLC, self.g_dBLC, self.b_dBLC,

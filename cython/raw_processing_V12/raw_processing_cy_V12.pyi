@@ -39,7 +39,8 @@ class RawV12Processor:
         black_level : int
             The black level of the RAW sensor data in native camera units.
         ADC_max_level : int
-            Maximum ADC value from the camera, used for highlight clipping.
+            Maximum ADC value from the camera, used in highlight clipping and
+            as output max value.
         bayer_pattern : str
             The Bayer pattern of the sensor, e.g., 'BGGR' or 'RGGB'.
             Currently, only these two are supported.
@@ -62,7 +63,7 @@ class RawV12Processor:
             precision. 1024 (10-bit) is often sufficient. Defaults to 1024.
         streaming : bool, optional
             Whether to enable streaming mode. If True, the processor will
-            store the result to a pre-allocated buffer to imporve performance. 
+            store the result to a pre-allocated buffer to improve performance. 
             It will be overwritten in the next `.process()` call. 
             Defaults to False.
         """
@@ -76,18 +77,22 @@ class RawV12Processor:
         ----------
         img : np.ndarray
             The input 2D RAW image as a NumPy array (uint16).
-            User should ensure the image size is *always* readable within declared
-            size (`H_orig * W_orig`), or SegmentFault would occur.
+            The image shape should not larger than (H_orig, W_orig). 
         out : np.ndarray, optional
-            Pre-allocated countinuous array of shape `(H_orig, W_orig, 3)` if you want 
-            to store the result in place. If provided, `streaming` is ignored.
+            Optional pre-allocated continuous uint16 array for at least `img.size`
+            size if you want to store the result in place. If provided, 
+            `streaming` is ignored.
 
         Returns
         -------
         np.ndarray
-            The processed 3D RGB image as a NumPy array (uint16). If streaming=True
-            and out is None, the result buffer will be overwrite in the next `process`
-            call.
+            The processed 3D RGB image NDArray[uint16] of shape (H_orig, W_orig, 3)
+            or `out` buffer shape.
+            If the input image is mismatch (smaller) than the buffer, the result 
+            will be filled from the buffer head, following C_CONTIGUOUS layout. 
+            In this case, user should manually extract effective pixels.
+            If `streaming=True` and `out` is None, the result buffer will be overwritten 
+            in the next `process` call.
         """
         ...
 
