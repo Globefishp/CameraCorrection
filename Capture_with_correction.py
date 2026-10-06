@@ -41,13 +41,14 @@ raw_processor_list =  ['raw_processing_cy_V7',
                        'raw_processing_cy_V12',
                        ]
 uint16_list = ['raw_processing_cy_V11', 'raw_processing_cy_V12']
+_12bit_list = ['raw_processing_cy_V12']
 out_list = ['raw_processing_cy_V12']
-image_size = (2048, 2448)
+image_size = (2048, 2460)
 
 
 cy_V6_mode = 'scatter'
 
-EXPOSURE_TIME = 10 # ms
+EXPOSURE_TIME = 100 # ms
 correction_info = np.load('./correction_results_D50.npy', allow_pickle=True).item()
 correction_info['wb_params'] = (1.87217887201, 1.27358336204, 1.0, -16.2625453031, -13.099179932, 0.0)
 
@@ -64,7 +65,7 @@ img = mycam.grab_raw()
 mycam.close()
 if current_jit_func_name == 'raw_processing_cy_V4':
     processor = RawV4Processor(black_level=32,
-                               ADC_max_level=4096,
+                               ADC_max_level=4095,
                                bayer_pattern='BGGR',
                                wb_params=correction_info['wb_params'],
                                fwd_mtx=correction_info['fwd_mtx'],
@@ -75,7 +76,7 @@ if current_jit_func_name == 'raw_processing_cy_V4':
 elif current_jit_func_name == 'raw_processing_cy_V6':
     srgb_img = current_jit_func(img, 
                             black_level=32, 
-                            ADC_max_level=4096,
+                            ADC_max_level=4095,
                             bayer_pattern='BGGR',
                             wb_params=correction_info['wb_params'],
                             fwd_mtx=correction_info['fwd_mtx'],
@@ -85,7 +86,7 @@ elif current_jit_func_name == 'raw_processing_cy_V6':
                             )
 elif current_jit_func_name in raw_processor_list:
     processor = cy_processor(*image_size, black_level=32,
-                               ADC_max_level=4096,
+                               ADC_max_level=4095,
                                bayer_pattern='BGGR',
                                wb_params=correction_info['wb_params'],
                                fwd_mtx=correction_info['fwd_mtx'],
@@ -100,7 +101,7 @@ elif current_jit_func_name in raw_processor_list:
 else:
     srgb_img = current_jit_func(img, 
                             black_level=32, 
-                            ADC_max_level=4096,
+                            ADC_max_level=4095,
                             bayer_pattern='BGGR',
                             wb_params=correction_info['wb_params'],
                             fwd_mtx=correction_info['fwd_mtx'],
@@ -113,8 +114,12 @@ print(f'Img size:{srgb_img.shape}')
 # Save img using matplotlib
 if current_jit_func_name in uint16_list:
     # uint16->uint8
-    srgb_img = (srgb_img >> 8).astype(np.uint8)
+    if current_jit_func_name in _12bit_list:
+        srgb_img = (srgb_img >> 4).astype(np.uint8)
+    else:
+        srgb_img = (srgb_img >> 8).astype(np.uint8)
 plt.imsave('srgb_img.png', srgb_img)
+input()
 
 # 2. 多次运行并记录时间
 num_runs = 1000
@@ -140,7 +145,7 @@ for _ in range(num_runs):
         start_time = time.perf_counter()
         current_jit_func(img, 
                          black_level=32, 
-                         ADC_max_level=4096,
+                         ADC_max_level=4095,
                          bayer_pattern='BGGR',
                          wb_params=correction_info['wb_params'],
                          fwd_mtx=correction_info['fwd_mtx'],
@@ -153,7 +158,7 @@ for _ in range(num_runs):
         start_time = time.perf_counter()
         current_jit_func(img,
                        black_level=32,
-                       ADC_max_level=4096,
+                       ADC_max_level=4095,
                        bayer_pattern='BGGR',
                        wb_params=correction_info['wb_params'],
                        fwd_mtx=correction_info['fwd_mtx'],
@@ -189,7 +194,7 @@ elif current_jit_func_name == 'raw_processing_cy_V6':
     profiler.enable()
     current_jit_func(img, 
                             black_level=32, 
-                            ADC_max_level=4096,
+                            ADC_max_level=4095,
                             bayer_pattern='BGGR',
                             wb_params=correction_info['wb_params'],
                             fwd_mtx=correction_info['fwd_mtx'],
@@ -201,7 +206,7 @@ else:
     profiler.enable()
     current_jit_func(img,
                    black_level=32,
-                   ADC_max_level=4096,
+                   ADC_max_level=4095,
                    bayer_pattern='BGGR',
                    wb_params=correction_info['wb_params'],
                    fwd_mtx=correction_info['fwd_mtx'],
